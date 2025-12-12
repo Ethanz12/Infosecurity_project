@@ -10,12 +10,13 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 # -----------------------------
-# Install system dependencies for mysqlclient
+# Install system dependencies for mysqlclient and mysqladmin
 # -----------------------------
 RUN apt-get update && apt-get install -y \
     build-essential \
     default-libmysqlclient-dev \
     pkg-config \
+    default-mysql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------
@@ -44,6 +45,12 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # -----------------------------
 COPY . .
 
+# -----------------------------
+# Copy entrypoint script
+# -----------------------------
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Switch to non-root user
 USER appuser
 
@@ -51,6 +58,7 @@ USER appuser
 EXPOSE 8000
 
 # -----------------------------
-# Gunicorn command
+# Use entrypoint to wait for MySQL and run migrations
 # -----------------------------
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["gunicorn", "ISPJ_Web_App.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]
