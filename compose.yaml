@@ -1,11 +1,11 @@
+version: "3.9"
+
 services:
   backend:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: securegov-backend
-    # Use Gunicorn for production instead of Django dev server
-    command: gunicorn ISPJ_Web_App.wsgi:application --bind 0.0.0.0:8000 --workers 3
     ports:
       - "8000:8000"
     env_file:
@@ -32,13 +32,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  # Optional future service for AI-based Data Classification
-  # classifier:
-  #   build: ./classifier
-  #   restart: always
-  #   depends_on:
-  #     - backend
 
 volumes:
   db-data:
