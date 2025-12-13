@@ -3,47 +3,60 @@ from django.http import HttpResponse
 from django.contrib.auth.models import User
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 import logging
 from django.db import connection, DatabaseError
 
 # Setup logger
 logger = logging.getLogger(__name__)
 
-# -------------------------------
-# Home Page
-# -------------------------------
+
 def index(request):
     return render(request, "home/index.html")
 
 
-# -------------------------------
-# Register Page
-# -------------------------------
+
 def register_view(request):
     if request.method == "POST":
-        username = request.POST.get("username", "").strip()
-        email = request.POST.get("email", "").strip()
+        # Normalize input to prevent duplicates like Admin/admin
+        username = request.POST.get("username", "").strip().lower()
+        email = request.POST.get("email", "").strip().lower()
         password = request.POST.get("password", "")
         password2 = request.POST.get("password2", "")
 
-        # Validate input
-        if not username or not email or not password or not password2:
+        # Basic validation
+        if not all([username, email, password, password2]):
             messages.error(request, "All fields are required.")
             return redirect("register")
 
         if password != password2:
-            messages.error(request, "Passwords do not match!")
+            messages.error(request, "Passwords do not match.")
             return redirect("register")
 
         try:
-            if User.objects.filter(username=username).exists():
-                messages.error(request, "Username already taken!")
+            # Prevent username & email enumeration
+            if User.objects.filter(username=username).exists() or User.objects.filter(email=email).exists():
+                messages.error(request, "Registration failed. Please try different credentials.")
                 return redirect("register")
 
-            user = User.objects.create_user(username=username, email=email, password=password)
-            user.save()
-            messages.success(request, "Account created successfully! Please login.")
+            # Enforce strong passwords (Django validators)
+            validate_password(password)
+
+            # Create user securely (password is hashed)
+            User.objects.create_user(
+                username=username,
+                email=email,
+                password=password
+            )
+
+            messages.success(request, "Account created successfully. Please login.")
             return redirect("login")
+
+        except ValidationError as e:
+            # Password policy error (safe to show)
+            messages.error(request, e.messages[0])
+            return redirect("register")
 
         except DatabaseError as e:
             logger.error(f"Database error during registration: {e}")
@@ -58,16 +71,14 @@ def register_view(request):
     return render(request, "register/register.html")
 
 
-# -------------------------------
-# Login Page
-# -------------------------------
+
 def login_view(request):
     if request.method == "POST":
-        username = request.POST.get("username", "").strip()
+        username = request.POST.get("username", "").strip().lower()
         password = request.POST.get("password", "")
 
         if not username or not password:
-            messages.error(request, "Please enter both username and password.")
+            messages.error(request, "Invalid username or password.")
             return redirect("login")
 
         user = authenticate(request, username=username, password=password)
@@ -76,34 +87,31 @@ def login_view(request):
             messages.success(request, f"Welcome back, {user.username}!")
             return redirect("home")
         else:
+            # Generic error prevents user enumeration
             messages.error(request, "Invalid username or password.")
             return redirect("login")
 
     return render(request, "register/login.html")
 
 
-# -------------------------------
-# Logout
-# -------------------------------
+
 def logout_view(request):
     logout(request)
     messages.success(request, "You have been logged out.")
     return redirect("home")
 
 
-# -------------------------------
-# Test DB Connection
-# -------------------------------
+
 def test_db_connection(request):
     try:
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1")
             result = cursor.fetchone()
             if result and result[0] == 1:
-                logger.info("MySQL connection successful")
-                return HttpResponse("MySQL connection successful")
+                logger.info("Database connection successful")
+                return HttpResponse("Database connection successful")
             else:
-                return HttpResponse("MySQL returned unexpected result")
+                return HttpResponse("Database returned unexpected result")
     except Exception as e:
-        logger.error(f"MySQL connection failed: {e}")
-        return HttpResponse(f"MySQL connection failed: {e}", status=500)
+        logger.error(f"Database connection failed: {e}")
+        return HttpResponse("Database connection failed", status=500)
