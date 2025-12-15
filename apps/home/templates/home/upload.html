@@ -1,0 +1,63 @@
+{% extends "home/base.html" %}
+
+{% block title %}Upload File{% endblock %}
+
+{% block content %}
+<h1>Upload File for Classification</h1>
+<p>Upload a file to analyze and classify automatically.</p>
+
+<form method="post" enctype="multipart/form-data" class="upload-form">
+    {% csrf_token %}
+    
+    <div class="file-input-wrapper">
+        <input type="file" id="file" name="file" required>
+        <label for="file">Choose File</label>
+        <span id="file-name">No file chosen</span>
+    </div>
+    
+    <button type="submit" class="btn-primary">Upload File</button>
+</form>
+
+<div style="margin-top: 20px;">
+    <a href="{% url 'file_list' %}">View My Files</a>
+</div>
+
+<style>
+.upload-form {
+    margin-top: 20px;
+}
+
+.file-input-wrapper {
+    margin-bottom: 20px;
+}
+
+.file-input-wrapper input[type="file"] {
+    display: none;
+}
+
+.file-input-wrapper label {
+    display: inline-block;
+    padding: 10px 20px;
+    background-color: #0A2342;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.file-input-wrapper label:hover {
+    background-color: #08304d;
+}
+
+#file-name {
+    margin-left: 10px;
+    color: #555;
+}
+</style>
+
+<script>
+document.getElementById('file').addEventListener('change', function(e) {
+    const fileName = e.target.files[0]?.name || 'No file chosen';
+    document.getElementById('file-name').textContent = fileName;
+});
+</script>
+{% endblock %}
