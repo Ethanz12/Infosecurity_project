@@ -27,7 +27,7 @@
             background-color: #08304d; 
         }
         .navbar .user-info {
-            margin-left: auto; /* Push to right */
+            margin-left: auto;
             display: flex;
             align-items: center;
             gap: 10px;
@@ -47,32 +47,6 @@
             border-radius: 10px; 
             background: white;
         }
-        .form-card label { 
-            display: block; 
-            margin-bottom: 5px; 
-            font-weight: bold; 
-            color: #0A2342; 
-        }
-        .form-card input { 
-            width: 100%; 
-            padding: 8px 10px; 
-            margin-bottom: 15px; 
-            border: 1px solid #ccc; 
-            border-radius: 5px; 
-        }
-        .btn-primary {
-            width: 100%; 
-            padding: 10px; 
-            background-color: #0A2342; 
-            color: white;
-            border: none; 
-            border-radius: 5px; 
-            font-size: 16px; 
-            cursor: pointer;
-        }
-        .btn-primary:hover { 
-            background-color: #08304d; 
-        }
         .messages { 
             list-style: none; 
             padding: 0; 
@@ -88,10 +62,16 @@
     </style>
 </head>
 <body>
+
     <div class="navbar">
         <a href="{% url 'home' %}">Home</a>
         <a href="#">About</a>
         <a href="#">Contact</a>
+
+        {% if user.is_authenticated and user.is_staff %}
+            <a href="{% url 'staff_page' %}">Staff Page</a>
+        {% endif %}
+
         <div class="user-info">
             {% if user.is_authenticated %}
                 <span>Hello, {{ user.username }}!</span>
@@ -114,5 +94,6 @@
 
         {% block content %}{% endblock %}
     </div>
+
 </body>
 </html>
