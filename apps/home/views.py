@@ -6,8 +6,11 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.contrib.auth.decorators import login_required
+from django.http import HttpResponseForbidden
 import logging
 from django.db import connection, DatabaseError
+from django.shortcuts import render
+from django.contrib.admin.views.decorators import staff_member_required
 import os  # ← Needed for os.getenv
 
 # Setup logger
@@ -31,6 +34,14 @@ def create_admin_if_missing():
 # ====================
 # Views
 # ====================
+@login_required
+def staff_page(request):
+    user = request.user
+
+    if user.is_staff or user.groups.filter(name="GovernmentWorker").exists():
+        return render(request, "staff/staff_page.html")
+
+    return HttpResponseForbidden("403 Forbidden – Access denied")
 
 def index(request):
     return render(request, "home/index.html")
