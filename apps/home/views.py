@@ -241,22 +241,15 @@ def upload_file(request):
             # Read file content for classification
             file_content = uploaded_file.read()
             
-            # Extract text from file
-            extracted_text = FileReader.extract_text(
-                file_content, 
-                uploaded_file.content_type,
-                uploaded_file.name
+            # Import OCRClassifier
+            from .classification import OCRClassifier
+            
+            # Classify using OCR-enabled classifier
+            classification, confidence, matched_patterns = OCRClassifier.classify_with_ocr(
+                file_content,
+                uploaded_file.name,
+                uploaded_file.content_type
             )
-            
-            # Classify the content
-            classification, scores = FileClassifier.classify_content(extracted_text)
-            
-            # Get matched patterns for transparency
-            matched_patterns = FileClassifier.get_matched_patterns(extracted_text, classification)
-            
-            # If no content-based classification, try filename
-            if classification == 'UNCLASSIFIED':
-                classification = FileClassifier.classify_file_by_name(uploaded_file.name)
             
             # Reset file pointer for S3 upload
             uploaded_file.seek(0)
@@ -284,14 +277,14 @@ def upload_file(request):
                 s3_key=s3_key,
                 file_type=uploaded_file.content_type,
                 classification=classification,
-                classification_confidence=scores.get(classification, 0),
-                classification_patterns=json.dumps(matched_patterns[:5]),  # Store top 5
+                classification_confidence=confidence,
+                classification_patterns=json.dumps(matched_patterns[:5]),
                 classified_at=timezone.now()
             )
             
             messages.success(
                 request, 
-                f"File '{uploaded_file.name}' uploaded and classified as: {classification}"
+                f"File '{uploaded_file.name}' uploaded and classified as: {classification} (confidence: {confidence})"
             )
             return redirect('file_list')
             
@@ -301,7 +294,7 @@ def upload_file(request):
             return redirect('upload_file')
         except Exception as e:
             logger.error(f"Upload error: {e}")
-            messages.error(request, f"An error occurred during upload: {str(e)}")
+            messages.error(request, f"An error occurred: {str(e)}")
             return redirect('upload_file')
     
     return render(request, 'home/upload.html')
