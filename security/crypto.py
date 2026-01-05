@@ -1,24 +1,31 @@
 # security/crypto.py
 from cryptography.fernet import Fernet
 import os
+import logging
 
-# Load encryption key from environment variable
-# You can generate one with: Fernet.generate_key().decode()
-KEY = os.getenv("FIELD_ENCRYPTION_KEY")
+logger = logging.getLogger(__name__)
 
-if not KEY:
-    raise ValueError("FIELD_ENCRYPTION_KEY environment variable not set!")
+# 1. Load the key from the environment variable
+# IMPORTANT: This name must match your .env file exactly!
+key_str = os.getenv("FIELD_ENCRYPTION_KEY")
 
-fernet = Fernet(KEY.encode())
+# 2. Safety Check: If key is missing, generate a temporary one but WARN the user.
+if not key_str:
+    logger.warning("⚠️ CRITICAL SECURITY WARNING: FIELD_ENCRYPTION_KEY not found in environment!")
+    logger.warning("Using a temporary random key. DATA WILL BE LOST upon restart.")
+    key_str = Fernet.generate_key().decode()
 
-# Encrypt a string
-def encrypt(value: str) -> str:
-    if not value:
-        return ""
-    return fernet.encrypt(value.encode()).decode()
+# 3. Initialize the Cipher
+cipher = Fernet(key_str.encode())
 
-# Decrypt a string
-def decrypt(value: str) -> str:
-    if not value:
-        return ""
-    return fernet.decrypt(value.encode()).decode()
+def encrypt(txt: str) -> str:
+    if not txt: return ""
+    return cipher.encrypt(txt.encode()).decode()
+
+def decrypt(txt: str) -> str:
+    if not txt: return ""
+    try:
+        return cipher.decrypt(txt.encode()).decode()
+    except Exception as e:
+        logger.error(f"Decryption failed: {e}")
+        return "[Decryption Error]"
