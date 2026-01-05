@@ -1,11 +1,150 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Your Profile</title>
-</head>
-<body>
-    <h1>Citizen Profile</h1>
-    
-</body>
-</html>
+{% extends "home/base.html" %}
+
+{% block title %}Profile - SecureGov{% endblock %}
+
+{% block content %}
+<div class="profile-hero">
+    <h1>Welcome, <span>{{ user.get_full_name }}</span></h1>
+    <p>Manage your profile details below. Make sure your information is up-to-date and secure.</p>
+</div>
+
+<div class="profile-container">
+    <div class="profile-card">
+        <h2>Your Information</h2>
+        <form method="POST">
+            {% csrf_token %}
+            
+            <div class="mb-3">
+                <label class="form-label">Full Name</label>
+                <input type="text" class="form-input" name="full_name" value="{{ user.get_full_name }}">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Email</label>
+                <input type="email" class="form-input" name="email" value="{{ user.email }}">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">NRIC</label>
+                <input type="text" class="form-input" name="nric" value="{{ profile.nric }}">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Phone</label>
+                <input type="text" class="form-input" name="phone" value="{{ profile.phone }}">
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Save</button>
+                <a href="{% url 'home' %}" class="btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+/* Profile Hero Section */
+.profile-hero {
+    text-align: center;
+    padding: 60px 20px;
+    background-color: #0A2342;
+    color: white;
+    border-radius: 12px;
+    margin-bottom: 40px;
+}
+
+.profile-hero h1 {
+    font-size: 36px;
+    margin-bottom: 10px;
+}
+
+.profile-hero h1 span {
+    color: #C8102E;
+}
+
+.profile-hero p {
+    font-size: 18px;
+    max-width: 700px;
+    margin: 0 auto;
+    line-height: 1.6;
+}
+
+/* Profile Card */
+.profile-container {
+    display: flex;
+    justify-content: center;
+    padding: 0 20px;
+}
+
+.profile-card {
+    background-color: #f8f9fa;
+    padding: 30px;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 500px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.profile-card h2 {
+    margin-bottom: 20px;
+    color: #0A2342;
+    text-align: center;
+}
+
+/* Form Inputs */
+.form-label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 6px;
+    color: #0A2342;
+}
+
+.form-input {
+    width: 100%;
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    margin-bottom: 15px;
+    font-size: 16px;
+}
+
+/* Buttons */
+.form-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 15px;
+}
+
+.btn-primary {
+    flex: 1;
+    padding: 12px 20px;
+    border-radius: 6px;
+    background-color: #C8102E;
+    color: white;
+    font-weight: bold;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    text-align: center;
+}
+
+.btn-primary:hover {
+    background-color: #a50d25;
+}
+
+.btn-secondary {
+    flex: 1;
+    padding: 12px 20px;
+    border-radius: 6px;
+    border: 2px solid #C8102E;
+    color: #C8102E;
+    text-decoration: none;
+    font-weight: bold;
+    text-align: center;
+}
+
+.btn-secondary:hover {
+    background-color: rgba(200, 16, 46, 0.1);
+}
+</style>
+{% endblock %}
