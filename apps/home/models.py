@@ -9,16 +9,16 @@ class CitizenProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
 
     # Encrypted fields (Stored as ciphertext)
-    encrypted_nric = models.TextField(blank=True, null=True)
-    encrypted_address = models.TextField(blank=True, null=True)
+    encrypted_nric = models.TextField(blank=True, null=True)  # encryption
+    encrypted_address = models.TextField(blank=True, null=True)  # encryption
     encrypted_phone = models.TextField(blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # --- Encryption Helper Methods ---
-    def set_nric(self, nric: str):
-        if nric: self.encrypted_nric = encrypt(nric)
+    # --- Encryption Helper Methods --- 
+    def set_nric(self, nric: str): 
+        if nric: self.encrypted_nric = encrypt(nric)  
 
     def get_nric(self) -> str:
         return decrypt(self.encrypted_nric) if self.encrypted_nric else ""

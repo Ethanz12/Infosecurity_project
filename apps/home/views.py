@@ -1,5 +1,3 @@
-# apps/home/views.py
-
 from django.shortcuts import render, redirect
 from django.http import HttpResponse, HttpResponseForbidden
 from django.contrib.auth.models import User, Group
@@ -8,90 +6,171 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.contrib.auth.decorators import login_required
-from django.db import connection, DatabaseError
+from django.db import connection
 from django import forms
 import logging
 import os
 
-# Import your model
 from .models import CitizenProfile
 
 logger = logging.getLogger(__name__)
 
 HARD_ROLES = ["Citizen", "GovernmentWorker"]
 
-# --- HELPER FUNCTIONS ---
+# --------------------
+# Helper Functions
+# --------------------
+
 def get_or_create_roles():
-    """Ensure roles exist, create if missing"""
     for role in HARD_ROLES:
         Group.objects.get_or_create(name=role)
 
 def create_admin_if_missing():
-    """Create admin user from environment variables if not exists"""
     admin_username = os.getenv("ADMIN_USER", "admin")
     admin_password = os.getenv("ADMIN_PASS", "adminpass")
     if not User.objects.filter(username=admin_username).exists():
-        User.objects.create_superuser(username=admin_username, email="admin@example.com", password=admin_password)
-        logger.info(f"Admin user '{admin_username}' created automatically.")
+        User.objects.create_superuser(
+            username=admin_username,
+            email="admin@example.com",
+            password=admin_password
+        )
+        logger.info("Admin account created automatically.")
 
-# --- FORM CLASS ---
+def mask_nric(nric: str):
+    if not nric or len(nric) < 4:
+        return ""
+    return nric[0] + "****" + nric[-3:]
+
+def mask_phone(phone: str):
+    if not phone or len(phone) < 4:
+        return ""
+    return phone[0] + "****" + phone[-3:]
+
+# --------------------
+# Forms
+# --------------------
+
 class CitizenProfileForm(forms.Form):
-    nric = forms.CharField(
-        max_length=9, 
-        required=False, 
-        label="NRIC (Encrypted)"
-    )
-    phone = forms.CharField(
-        max_length=15, 
-        required=False, 
-        label="Phone Number (Encrypted)"
-    )
+    nric = forms.CharField(max_length=9, required=False)
+    phone = forms.CharField(max_length=15, required=False)
     address = forms.CharField(
-        widget=forms.Textarea(attrs={'rows': 3}), 
-        required=False, 
-        label="Home Address (Encrypted)"
+        widget=forms.Textarea(attrs={"rows": 3}),
+        required=False
     )
 
-# --- VIEWS ---
+    def clean_nric(self):
+        nric = self.cleaned_data.get("nric")
+
+        if not nric:
+            return nric
+
+        # Ignore masked display value
+        if "*" in nric:
+            return nric
+
+        if len(nric) != 9:
+            raise forms.ValidationError(
+                "NRIC must be exactly 9 characters."
+            )
+
+        return nric
+
+    def clean_phone(self):
+        phone = self.cleaned_data.get("phone")
+
+        if not phone:
+            return phone
+
+        # Ignore masked display value
+        if "*" in phone:
+            return phone
+
+        if not phone.isdigit():
+            raise forms.ValidationError(
+                "Phone number must contain digits only."
+            )
+
+        if len(phone) < 8:
+            raise forms.ValidationError(
+                "Phone number must be at least 8 digits."
+            )
+
+        return phone
+
+# --------------------
+# Views
+# --------------------
 
 @login_required
 def profile_view(request):
-    """
-    Secure Profile View:
-    - Fetches encrypted data from DB -> Decrypts for the Form
-    - Takes clean data from Form -> Encrypts for the DB
-    """
-    # 1. Get the profile safely (create if missing)
     profile, created = CitizenProfile.objects.get_or_create(user=request.user)
 
-    if request.method == 'POST':
+    if request.method == "POST":
         form = CitizenProfileForm(request.POST)
         if form.is_valid():
-            # Get cleartext from form
-            nric_clear = form.cleaned_data['nric']
-            phone_clear = form.cleaned_data['phone']
-            address_clear = form.cleaned_data['address']
+            nric = form.cleaned_data.get("nric")
+            phone = form.cleaned_data.get("phone")
+            address = form.cleaned_data.get("address")
 
-            # Encrypt and set to model (only if data exists)
-            profile.set_nric(nric_clear)
-            profile.set_phone(phone_clear)
-            profile.set_address(address_clear)
-            
-            # Save to DB
+            def is_masked(value):
+                return value and "*" in value
+
+            if nric and not is_masked(nric):
+                profile.set_nric(nric)  # encryption
+            if phone and not is_masked(phone):
+                profile.set_phone(phone)  # encryption
+            if address:
+                profile.set_address(address)
+
+            # Update full name & email
+            full_name = request.POST.get("full_name", "").strip()
+            if full_name:
+                parts = full_name.split(" ", 1)
+                request.user.first_name = parts[0]
+                request.user.last_name = parts[1] if len(parts) > 1 else ""
+                request.user.save()
+
+            email = request.POST.get("email", "").strip()
+            if email:
+                request.user.email = email
+                request.user.save()
+
             profile.save()
-            
-            messages.success(request, "Profile updated securely.")
-            return redirect('profile') # Redirect prevents re-submission
-    else:
-        # Pre-fill form with decrypted data
-        initial_data = {
-            'nric': profile.get_nric(),
-            'phone': profile.get_phone(),
-            'address': profile.get_address()
-        }
-        form = CitizenProfileForm(initial=initial_data)
+            messages.success(request, "Profile updated successfully.")
+            return redirect("profile")
 
-    return render(request, "home/profile.html", {'form': form})
+        else:
+            # Form has errors → mask NRIC/phone before sending to template
+            raw_nric = request.POST.get("nric", "")
+            raw_phone = request.POST.get("phone", "")
+
+            context = {
+                "form_data": request.POST,
+                "errors": {k: v[0] for k, v in form.errors.items()},
+                "user": request.user,
+                "masked_nric": mask_nric(profile.get_nric() if "*" in raw_nric else raw_nric),
+                "masked_phone": mask_phone(profile.get_phone() if "*" in raw_phone else raw_phone),
+            }
+            return render(request, "home/profile.html", context)
+
+    else:
+        # GET request - FIX APPLIED HERE
+        context = {
+            "form_data": {
+                "full_name": request.user.get_full_name(),
+                "email": request.user.email,
+                # The fix: Apply mask functions here so the template receives masked data
+                "nric": mask_nric(profile.get_nric()),
+                "phone": mask_phone(profile.get_phone()),
+                "address": profile.get_address(),
+            },
+            "errors": {},
+            "user": request.user,
+            "masked_nric": mask_nric(profile.get_nric()),
+            "masked_phone": mask_phone(profile.get_phone()),
+        }
+        return render(request, "home/profile.html", context)
+
 
 @login_required
 def staff_page(request):
@@ -100,11 +179,14 @@ def staff_page(request):
         return render(request, "staff/staff_page.html")
     return HttpResponseForbidden("403 Forbidden – Access denied")
 
+
 def index(request):
     return render(request, "home/index.html")
 
+
 def register_view(request):
     create_admin_if_missing()
+
     if request.method == "POST":
         username = request.POST.get("username", "").strip().lower()
         email = request.POST.get("email", "").strip().lower()
@@ -114,70 +196,65 @@ def register_view(request):
         if not all([username, email, password, password2]):
             messages.error(request, "All fields are required.")
             return redirect("register")
+
         if password != password2:
             messages.error(request, "Passwords do not match.")
             return redirect("register")
 
         try:
-            if User.objects.filter(username=username).exists() or User.objects.filter(email=email).exists():
-                messages.error(request, "Registration failed. Try different credentials.")
-                return redirect("register")
-
             validate_password(password)
             get_or_create_roles()
 
-            user = User.objects.create_user(username=username, email=email, password=password)
-            
-            # Auto-assign Citizen role
-            admin_username = os.getenv("ADMIN_USER", "admin")
-            if username != admin_username:
-                citizen_group = Group.objects.get(name="Citizen")
-                user.groups.add(citizen_group)
+            user = User.objects.create_user(
+                username=username,
+                email=email,
+                password=password
+            )
 
-            messages.success(request, "Account created successfully. Please login.")
+            citizen_group = Group.objects.get(name="Citizen")
+            user.groups.add(citizen_group)
+
+            messages.success(request, "Account created successfully.")
             return redirect("login")
 
         except ValidationError as e:
             messages.error(request, e.messages[0])
-            return redirect("register")
         except Exception as e:
-            logger.error(f"Error: {e}")
-            messages.error(request, "An unexpected error occurred.")
-            return redirect("register")
+            logger.error(e)
+            messages.error(request, "Unexpected error occurred.")
+
+        return redirect("register")
 
     return render(request, "register/register.html")
 
+
 def login_view(request):
     if request.method == "POST":
-        username = request.POST.get("username", "").strip().lower()
+        username = request.POST.get("username", "").lower()
         password = request.POST.get("password", "")
         user = authenticate(request, username=username, password=password)
-        if user is not None:
+
+        if user:
             login(request, user)
-            messages.success(request, f"Welcome back, {user.username}!")
             return redirect("home")
-        else:
-            messages.error(request, "Invalid username or password.")
-            return redirect("login")
+
+        messages.error(request, "Invalid credentials.")
+        return redirect("login")
+
     return render(request, "register/login.html")
+
 
 @login_required
 def logout_view(request):
     logout(request)
-    messages.success(request, "Logged out.")
     return redirect("home")
+
 
 @login_required
 def test_db_connection(request):
     try:
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1")
-            result = cursor.fetchone()
-            if result and result[0] == 1:
-                logger.info("Database connection successful")
-                return HttpResponse("Database connection successful")
-            else:
-                return HttpResponse("Database returned unexpected result")
-    except Exception as e:
-        logger.error(f"Database connection failed: {e}")
+            return HttpResponse("Database connection successful")
+    except Exception:
         return HttpResponse("Database connection failed", status=500)
