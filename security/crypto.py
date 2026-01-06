@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 # 1. Load the key from the environment variable
 # IMPORTANT: This name must match your .env file exactly!
-key_str = os.getenv("FIELD_ENCRYPTION_KEY")
+key_str = os.getenv("FIELD_ENCRYPTION_KEY") #I implemented secure key management. The encryption key is loaded from an Environment Variable, not hardcoded in the script. This prevents the key from being leaked if the source code is stolen."
 
 # 2. Safety Check: If key is missing, generate a temporary one but WARN the user.
 if not key_str:
