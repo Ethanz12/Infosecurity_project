@@ -29,7 +29,6 @@ staticfiles/
 # -----------------------------
 # Docker
 # -----------------------------
-
 *.dockerfile
 docker-compose.override.yml
 db-data/
@@ -46,3 +45,10 @@ db-data/
 # -----------------------------
 .DS_Store
 Thumbs.db
+
+# -----------------------------
+# Environment files (SECRETS)
+# -----------------------------
+backend.env
+*.env
+.env

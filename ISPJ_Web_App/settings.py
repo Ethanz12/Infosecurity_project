@@ -159,3 +159,17 @@ AWS_S3_OBJECT_PARAMETERS = {
 }
 AWS_DEFAULT_ACL = None  # Don't make files public by default
 AWS_S3_FILE_OVERWRITE = False  # Don't overwrite files with same name
+
+# ============================================================
+# S3 BACKUP CONFIGURATION (Cloud Disaster Recovery)
+# ============================================================
+
+# Backup bucket configuration for disaster recovery
+AWS_BACKUP_BUCKET_NAME = os.environ.get('AWS_BACKUP_BUCKET_NAME', f'{AWS_STORAGE_BUCKET_NAME}-backup')
+AWS_BACKUP_REGION = os.environ.get('AWS_BACKUP_REGION', 'ap-southeast-2')  # Different region for DR
+
+# S3 Cross-Region Replication is configured in AWS Console
+# Primary bucket: securegov-fileupload (ap-southeast-1)
+# Backup bucket: securegov-fileupload-backup (ap-southeast-2)
+# Replication rule: Automatic sync of all uploaded files
+# Encryption: SSE-S3 enabled on both buckets
