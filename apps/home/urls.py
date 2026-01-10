@@ -9,5 +9,8 @@ urlpatterns = [
     path('test-db/', views.test_db_connection, name='test_db'),
     path("staff/", views.staff_page, name="staff_page"),
     path('profile/', views.profile_view, name='profile'),
+    path('upload/', views.upload_file, name='upload_file'),
+    path('files/', views.file_list, name='file_list'),
+    path('download/<int:file_id>/', views.download_file, name='download_file'),
 ]
 

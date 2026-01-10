@@ -27,3 +27,29 @@ class Migration(migrations.Migration):
             ],
         ),
     ]
+
+class Migration(migrations.Migration):
+    initial = True
+
+    dependencies = [
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='UploadedFile',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('file_name', models.CharField(max_length=255)),
+                ('file_size', models.IntegerField()),
+                ('s3_key', models.CharField(max_length=500)),
+                ('upload_date', models.DateTimeField(auto_now_add=True)),
+                ('file_type', models.CharField(max_length=100)),
+                ('classification', models.CharField(blank=True, max_length=50, null=True)),
+                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
+            ],
+            options={
+                'ordering': ['-upload_date'],
+            },
+        ),
+    ]
