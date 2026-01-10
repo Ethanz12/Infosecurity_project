@@ -10,13 +10,17 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 # -----------------------------
-# Install system dependencies for mysqlclient, mysqladmin, and dos2unix
+# Install system dependencies for mysqlclient, mysqladmin, and dos2unix and Tesseract OCR
 # -----------------------------
 RUN apt-get update && apt-get install -y \
     build-essential \
     default-libmysqlclient-dev \
     pkg-config \
     default-mysql-client \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    libtesseract-dev \
+    poppler-utils \
     dos2unix \
     && rm -rf /var/lib/apt/lists/*
 
