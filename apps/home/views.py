@@ -6,7 +6,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.contrib.auth.decorators import login_required
-from django.db import connection
+from django.db import connection, transaction, IntegrityError
 from django import forms
 import logging
 import os
@@ -173,12 +173,11 @@ def profile_view(request):
             return render(request, "home/profile.html", context)
 
     else:
-        # GET request - FIX APPLIED HERE
+        # GET request
         context = {
             "form_data": {
                 "full_name": request.user.get_full_name(),
                 "email": request.user.email,
-                # The fix: Apply mask functions here so the template receives masked data
                 "nric": mask_nric(profile.get_nric()),
                 "phone": mask_phone(profile.get_phone()),
                 "address": profile.get_address(),
@@ -209,40 +208,61 @@ def register_view(request):
     if request.method == "POST":
         username = request.POST.get("username", "").strip().lower()
         email = request.POST.get("email", "").strip().lower()
+        nric = request.POST.get("nric", "").strip().upper()
         password = request.POST.get("password", "")
         password2 = request.POST.get("password2", "")
 
-        if not all([username, email, password, password2]):
+        # --- 1. Basic Empty Field Check ---
+        if not all([username, email, nric, password, password2]):
             messages.error(request, "All fields are required.")
             return redirect("register")
 
+        # --- 2. NRIC Format Validation ---
+        if len(nric) != 9:
+            messages.error(request, "Invalid NRIC: Must be exactly 9 characters (e.g., S1234567A).")
+            return redirect("register")
+        
+        if nric[0] not in ['S', 'T', 'F', 'G', 'M']:
+            messages.error(request, "Invalid NRIC: Must start with S, T, F, G, or M.")
+            return redirect("register")
+
+        # --- 3. Password Match ---
         if password != password2:
             messages.error(request, "Passwords do not match.")
             return redirect("register")
 
         try:
             validate_password(password)
-            get_or_create_roles()
+            
+            # --- 4. Atomic Transaction ---
+            with transaction.atomic():
+                # Create User
+                user = User.objects.create_user(
+                    username=username,
+                    email=email,
+                    password=password
+                )
 
-            user = User.objects.create_user(
-                username=username,
-                email=email,
-                password=password
-            )
+                # Assign Role (FIXED: use get_or_create to prevent crash)
+                citizen_group, _ = Group.objects.get_or_create(name="Citizen")
+                user.groups.add(citizen_group)
 
-            citizen_group = Group.objects.get(name="Citizen")
-            user.groups.add(citizen_group)
+                # Create Profile (FIXED: use get_or_create to prevent IntegrityError)
+                profile, created = CitizenProfile.objects.get_or_create(user=user)
+                profile.set_nric(nric)
+                profile.save()
 
-            messages.success(request, "Account created successfully.")
+            messages.success(request, "Account created successfully. Please login.")
             return redirect("login")
 
         except ValidationError as e:
             messages.error(request, e.messages[0])
-        except Exception as e:
-            logger.error(e)
-            messages.error(request, "Unexpected error occurred.")
+            return redirect("register")
 
-        return redirect("register")
+        except Exception as e:
+            logger.error(f"Registration Error: {e}")
+            messages.error(request, "An unexpected error occurred. Please try again.")
+            return redirect("register")
 
     return render(request, "register/register.html")
 
