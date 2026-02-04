@@ -29,10 +29,13 @@ from botocore.exceptions import ClientError
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from .models import UploadedFile
-from .classification import FileClassifier, FileReader
+from .classification import FileClassifier, FileReader 
 from django.utils import timezone
 import uuid
 import json
+
+# NEW IMPORTS FOR ABAC
+from .models import StaffProfile, DEPARTMENTS
 
 logger = logging.getLogger(__name__)
 
@@ -303,8 +306,8 @@ def test_db_connection(request):
 #S3 Stuff
 
 @login_required
-
 def upload_file(request):
+
     if request.method == 'POST' and request.FILES.get('file'):
         uploaded_file = request.FILES['file']
 
@@ -314,6 +317,7 @@ def upload_file(request):
         s3_key = f"uploads/{request.user.username}/{unique_filename}"
 
         try:
+        
             # Upload to S3
             s3_client = boto3.client(
                 's3',
@@ -329,40 +333,39 @@ def upload_file(request):
                 ExtraArgs={'ContentType': uploaded_file.content_type}
             )
 
-            # Save to database
+            # Save to database with classification
             file_record = UploadedFile.objects.create(
                 user=request.user,
                 file_name=uploaded_file.name,
                 file_size=uploaded_file.size,
                 s3_key=s3_key,
                 file_type=uploaded_file.content_type
+        
             )
 
             messages.success(request, f"File '{uploaded_file.name}' uploaded successfully!")
 
             return redirect('file_list')
-        
+
         except ClientError as e:
             logger.error(f"S3 upload error: {e}")
             messages.error(request, "Failed to upload file to cloud storage.")
             return redirect('upload_file')
-        
+
         except Exception as e:
             logger.error(f"Upload error: {e}")
-            messages.error(request, "An error occurred during upload.")
+            messages.error(request, f"An error occurred: {str(e)}")
             return redirect('upload_file')
+
     return render(request, 'home/upload.html')
 
 @login_required
-
 def file_list(request):
     files = UploadedFile.objects.filter(user=request.user)
     return render(request, 'home/file_list.html', {'files': files})
 
 @login_required
-
 def download_file(request, file_id):
-
     try:
         file_record = UploadedFile.objects.get(id=file_id, user=request.user)
         # Generate presigned URL (valid for 1 hour)
@@ -393,7 +396,6 @@ def download_file(request, file_id):
         return redirect('file_list')
     
 #View classified files
-
 @login_required
 
 def upload_file(request):
@@ -454,10 +456,7 @@ def upload_file(request):
                 classified_at=timezone.now()
             )
 
-            messages.success(
-                request, 
-                f"File '{uploaded_file.name}' uploaded and classified as: {classification} (confidence: {confidence})"
-            )
+            messages.success(request, f"File '{uploaded_file.name}' uploaded successfully!")
 
             return redirect('file_list')
 
@@ -468,7 +467,7 @@ def upload_file(request):
 
         except Exception as e:
             logger.error(f"Upload error: {e}")
-            messages.error(request, f"An error occurred: {str(e)}")
+            messages.error(request, "An error occurred during upload.")
             return redirect('upload_file')
 
     return render(request, 'home/upload.html')
@@ -479,6 +478,7 @@ def create_ticket(request):
     if request.method == "POST":
         subject = request.POST.get("subject", "").strip()
         description = request.POST.get("description", "").strip()
+        department = request.POST.get("department") # <--- NEW: Citizen picks department
 
         if not subject or not description:
             messages.error(request, "Subject and Description are required.")
@@ -487,12 +487,14 @@ def create_ticket(request):
         Ticket.objects.create(
             citizen=request.user,
             subject=subject,
-            description=description
+            description=description,
+            department=department # <--- NEW: Save Attribute
         )
         messages.success(request, "Ticket created successfully.")
         return redirect("ticket_list")
 
-    return render(request, "tickets/create_ticket.html")
+    # Pass DEPARTMENTS for dropdown
+    return render(request, "tickets/create_ticket.html", {"departments": DEPARTMENTS})
 
 
 @login_required
@@ -501,11 +503,32 @@ def ticket_list(request):
     
     # Logic: 
     # - Citizens see ONLY their own tickets.
-    # - Gov Workers see ALL tickets.
+    # - Gov Workers see tickets based on Attribute Access (Dept + Role)
     
-    if user.groups.filter(name="GovernmentWorker").exists() or user.is_staff:
-        tickets = Ticket.objects.all().order_by('-created_at')
-        is_gov = True
+    is_gov = user.groups.filter(name="GovernmentWorker").exists() or user.is_staff
+
+    if is_gov:
+        # --- ABAC LOGIC ---
+        try:
+            # 1. Get User Attributes
+            staff_profile = StaffProfile.objects.get(user=user)
+            
+            # 2. Filter Resources
+            # Rule: Ticket Dept == User Dept  AND  Ticket Level <= User Level
+            tickets = Ticket.objects.filter(
+                department=staff_profile.department,
+                min_clearance__lte=staff_profile.security_level
+            ).order_by('-created_at')
+            
+            messages.info(request, f"Viewing {staff_profile.get_department_display()} Tickets.")
+
+        except StaffProfile.DoesNotExist:
+            if user.is_superuser:
+                tickets = Ticket.objects.all().order_by('-created_at')
+            else:
+                tickets = Ticket.objects.none()
+                messages.warning(request, "Account Error: No Department Attributes found.")
+        # ------------------
     else:
         tickets = Ticket.objects.filter(citizen=user).order_by('-created_at')
         is_gov = False
@@ -521,15 +544,32 @@ def ticket_detail(request, ticket_id):
     is_gov = user.groups.filter(name="GovernmentWorker").exists() or user.is_staff
     is_owner = (ticket.citizen == user)
 
-    # Security Check: Only Owner or Gov Worker can view
-    if not (is_gov or is_owner):
-        return HttpResponseForbidden("Access Denied")
+    # Security Check: Only Owner or Gov Worker (With correct Attributes) can view
+    has_access = False
+
+    if is_owner:
+        has_access = True
+    elif is_gov:
+        if user.is_superuser:
+            has_access = True
+        else:
+            try:
+                # ABAC Check
+                staff = StaffProfile.objects.get(user=user)
+                if staff.department == ticket.department and staff.security_level >= ticket.min_clearance:
+                    has_access = True
+            except StaffProfile.DoesNotExist:
+                has_access = False
+
+    if not has_access:
+        return HttpResponseForbidden("Access Denied: Insufficient Department or Seniority clearance.")
 
     if request.method == "POST":
         # Only Gov Workers can reply/update status
         if is_gov:
             new_status = request.POST.get("status")
             response = request.POST.get("gov_response")
+            new_sensitivity = request.POST.get("sensitivity")
             
             if new_status:
                 ticket.status = new_status
@@ -539,6 +579,10 @@ def ticket_detail(request, ticket_id):
                 if not ticket.assigned_to:
                     ticket.assigned_to = user
             
+            # Senior staff can change sensitivity
+            if new_sensitivity:
+                ticket.min_clearance = int(new_sensitivity)
+            
             ticket.save()
             messages.success(request, "Ticket updated.")
             return redirect("ticket_detail", ticket_id=ticket.id)
@@ -546,7 +590,8 @@ def ticket_detail(request, ticket_id):
     # Data to show
     context = {
         "ticket": ticket,
-        "is_gov": is_gov
+        "is_gov": is_gov,
+        "sensitivity_levels": Ticket.TICKET_SENSITIVITY 
     }
 
     if is_gov:
