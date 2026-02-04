@@ -2,16 +2,17 @@
 ARG PYTHON_VERSION=3.12.3
 FROM python:${PYTHON_VERSION}-slim as base
 
-# Prevent .pyc files
+# Prevent .pyc files and buffer issues
 ENV PYTHONDONTWRITEBYTECODE=1
-# Unbuffered stdout/stderr
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
 # -----------------------------
-# Install system dependencies for mysqlclient, mysqladmin, and dos2unix and Tesseract OCR
+# Install system dependencies
 # -----------------------------
+# We install default-mysql-client for the entrypoint 'ping' check
+# We install dos2unix to fix Windows line ending issues in scripts
 RUN apt-get update && apt-get install -y \
     build-essential \
     default-libmysqlclient-dev \
@@ -51,20 +52,29 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY . .
 
 # -----------------------------
-# Copy entrypoint script
-# Convert Windows line endings to Linux line endings and make executable
+# CRITICAL PERMISSION FIX
+# -----------------------------
+# Since we run 'makemigrations' inside the container as 'appuser',
+# 'appuser' needs write permission to the /app folder to create the files.
+RUN chown -R appuser:appuser /app
+
+# -----------------------------
+# Setup Entrypoint Script
 # -----------------------------
 COPY entrypoint.sh /entrypoint.sh
+# Fix Windows line endings (CRLF -> LF) and make executable
 RUN dos2unix /entrypoint.sh && chmod +x /entrypoint.sh
 
 # Switch to non-root user
 USER appuser
 
-# Expose port for Gunicorn
+# Expose port
 EXPOSE 8000
 
 # -----------------------------
-# Use entrypoint to wait for MySQL and run migrations
+# Use entrypoint
 # -----------------------------
 ENTRYPOINT ["/entrypoint.sh"]
+
+# Default command
 CMD ["gunicorn", "ISPJ_Web_App.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]

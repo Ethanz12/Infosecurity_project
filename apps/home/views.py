@@ -10,6 +10,8 @@ from django.db import connection, transaction, IntegrityError
 from django import forms
 import logging
 import os
+from django.shortcuts import get_object_or_404
+from .models import Ticket
 
 from .models import CitizenProfile
 
@@ -470,3 +472,95 @@ def upload_file(request):
             return redirect('upload_file')
 
     return render(request, 'home/upload.html')
+
+#my ticket
+@login_required
+def create_ticket(request):
+    if request.method == "POST":
+        subject = request.POST.get("subject", "").strip()
+        description = request.POST.get("description", "").strip()
+
+        if not subject or not description:
+            messages.error(request, "Subject and Description are required.")
+            return redirect("create_ticket")
+
+        Ticket.objects.create(
+            citizen=request.user,
+            subject=subject,
+            description=description
+        )
+        messages.success(request, "Ticket created successfully.")
+        return redirect("ticket_list")
+
+    return render(request, "tickets/create_ticket.html")
+
+
+@login_required
+def ticket_list(request):
+    user = request.user
+    
+    # Logic: 
+    # - Citizens see ONLY their own tickets.
+    # - Gov Workers see ALL tickets.
+    
+    if user.groups.filter(name="GovernmentWorker").exists() or user.is_staff:
+        tickets = Ticket.objects.all().order_by('-created_at')
+        is_gov = True
+    else:
+        tickets = Ticket.objects.filter(citizen=user).order_by('-created_at')
+        is_gov = False
+
+    return render(request, "tickets/ticket_list.html", {"tickets": tickets, "is_gov": is_gov})
+
+
+@login_required
+def ticket_detail(request, ticket_id):
+    ticket = get_object_or_404(Ticket, id=ticket_id)
+    user = request.user
+    
+    is_gov = user.groups.filter(name="GovernmentWorker").exists() or user.is_staff
+    is_owner = (ticket.citizen == user)
+
+    # Security Check: Only Owner or Gov Worker can view
+    if not (is_gov or is_owner):
+        return HttpResponseForbidden("Access Denied")
+
+    if request.method == "POST":
+        # Only Gov Workers can reply/update status
+        if is_gov:
+            new_status = request.POST.get("status")
+            response = request.POST.get("gov_response")
+            
+            if new_status:
+                ticket.status = new_status
+            if response:
+                ticket.gov_response = response
+                # Auto-assign if replying and not yet assigned
+                if not ticket.assigned_to:
+                    ticket.assigned_to = user
+            
+            ticket.save()
+            messages.success(request, "Ticket updated.")
+            return redirect("ticket_detail", ticket_id=ticket.id)
+
+    # Data to show
+    context = {
+        "ticket": ticket,
+        "is_gov": is_gov
+    }
+
+    if is_gov:
+        # Limited View for Gov Workers (Privacy)
+        try:
+            profile = ticket.citizen.citizenprofile
+            citizen_info = {
+                "username": ticket.citizen.username,
+                "email": ticket.citizen.email,
+                "phone": mask_phone(profile.get_phone()), # Using your helper function
+                # NRIC is intentionally hidden
+            }
+            context["citizen_info"] = citizen_info
+        except:
+            context["citizen_info"] = None
+
+    return render(request, "tickets/ticket_detail.html", context)

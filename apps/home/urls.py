@@ -12,5 +12,8 @@ urlpatterns = [
     path('upload/', views.upload_file, name='upload_file'),
     path('files/', views.file_list, name='file_list'),
     path('download/<int:file_id>/', views.download_file, name='download_file'),
+    path('tickets/', views.ticket_list, name='ticket_list'),
+    path('tickets/create/', views.create_ticket, name='create_ticket'),
+    path('tickets/<int:ticket_id>/', views.ticket_detail, name='ticket_detail'),
 ]
 
