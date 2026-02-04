@@ -306,8 +306,8 @@ def test_db_connection(request):
 #S3 Stuff
 
 @login_required
-def upload_file(request):
 
+def upload_file(request):
     if request.method == 'POST' and request.FILES.get('file'):
         uploaded_file = request.FILES['file']
 
@@ -317,7 +317,6 @@ def upload_file(request):
         s3_key = f"uploads/{request.user.username}/{unique_filename}"
 
         try:
-        
             # Upload to S3
             s3_client = boto3.client(
                 's3',
@@ -333,39 +332,40 @@ def upload_file(request):
                 ExtraArgs={'ContentType': uploaded_file.content_type}
             )
 
-            # Save to database with classification
+            # Save to database
             file_record = UploadedFile.objects.create(
                 user=request.user,
                 file_name=uploaded_file.name,
                 file_size=uploaded_file.size,
                 s3_key=s3_key,
                 file_type=uploaded_file.content_type
-        
             )
 
             messages.success(request, f"File '{uploaded_file.name}' uploaded successfully!")
 
             return redirect('file_list')
-
+        
         except ClientError as e:
             logger.error(f"S3 upload error: {e}")
             messages.error(request, "Failed to upload file to cloud storage.")
             return redirect('upload_file')
-
+        
         except Exception as e:
             logger.error(f"Upload error: {e}")
-            messages.error(request, f"An error occurred: {str(e)}")
+            messages.error(request, "An error occurred during upload.")
             return redirect('upload_file')
-
     return render(request, 'home/upload.html')
 
 @login_required
+
 def file_list(request):
     files = UploadedFile.objects.filter(user=request.user)
     return render(request, 'home/file_list.html', {'files': files})
 
 @login_required
+
 def download_file(request, file_id):
+
     try:
         file_record = UploadedFile.objects.get(id=file_id, user=request.user)
         # Generate presigned URL (valid for 1 hour)
@@ -396,6 +396,7 @@ def download_file(request, file_id):
         return redirect('file_list')
     
 #View classified files
+
 @login_required
 
 def upload_file(request):
@@ -456,7 +457,10 @@ def upload_file(request):
                 classified_at=timezone.now()
             )
 
-            messages.success(request, f"File '{uploaded_file.name}' uploaded successfully!")
+            messages.success(
+                request, 
+                f"File '{uploaded_file.name}' uploaded and classified as: {classification} (confidence: {confidence})"
+            )
 
             return redirect('file_list')
 
@@ -467,11 +471,10 @@ def upload_file(request):
 
         except Exception as e:
             logger.error(f"Upload error: {e}")
-            messages.error(request, "An error occurred during upload.")
+            messages.error(request, f"An error occurred: {str(e)}")
             return redirect('upload_file')
 
     return render(request, 'home/upload.html')
-
 #my ticket
 @login_required
 def create_ticket(request):
