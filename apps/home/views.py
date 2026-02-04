@@ -343,10 +343,7 @@ def upload_file(request):
         
             )
 
-            messages.success(
-                request, 
-                f"File '{uploaded_file.name}' uploaded and classified as: {classification} (confidence: {confidence})"
-            )
+            messages.success(request, f"File '{uploaded_file.name}' uploaded successfully!")
 
             return redirect('file_list')
 
