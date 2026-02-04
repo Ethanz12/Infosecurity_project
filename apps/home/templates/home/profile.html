@@ -1,0 +1,181 @@
+{% extends "home/base.html" %}
+{% block title %}Profile - SecureGov{% endblock %}
+
+{% block content %}
+
+<div class="profile-hero">
+    <h1>Welcome, <span>{{ user.get_full_name|default:user.username }}</span></h1>
+    <p>Manage your profile details securely.</p>
+</div>
+
+<div class="profile-container">
+    <div class="profile-card">
+        <h2>Your Information</h2>
+
+        {# ===== GLOBAL MESSAGES ===== #}
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <form method="POST" novalidate>
+            {% csrf_token %}
+
+            <div class="mb-3">
+                <label class="form-label">Full Name</label>
+                <input type="text"
+                       class="form-input {% if errors.full_name %}input-error{% endif %}"
+                       name="full_name"
+                       value="{{ form_data.full_name|default:user.get_full_name }}">
+                {% if errors.full_name %}
+                    <div class="error-text">{{ errors.full_name }}</div>
+                {% endif %}
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Email</label>
+                <input type="email"
+                       class="form-input {% if errors.email %}input-error{% endif %}"
+                       name="email"
+                       value="{{ form_data.email|default:user.email }}">
+                {% if errors.email %}
+                    <div class="error-text">{{ errors.email }}</div>
+                {% endif %}
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">NRIC</label>
+                <input type="text"
+                       class="form-input {% if errors.nric %}input-error{% endif %}"
+                       name="nric"
+                       value="{% if form_data.nric %}{{ form_data.nric }}{% else %}{{ masked_nric }}{% endif %}">
+                {% if errors.nric %}
+                    <div class="error-text">{{ errors.nric }}</div>
+                {% endif %}
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Phone</label>
+                <input type="text"
+                       class="form-input {% if errors.phone %}input-error{% endif %}"
+                       name="phone"
+                       value="{% if form_data.phone %}{{ form_data.phone }}{% else %}{{ masked_phone }}{% endif %}">
+                {% if errors.phone %}
+                    <div class="error-text">{{ errors.phone }}</div>
+                {% endif %}
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Address</label>
+                <textarea class="form-input {% if errors.address %}input-error{% endif %}"
+                          name="address"
+                          rows="3">{{ form_data.address }}</textarea>
+                {% if errors.address %}
+                    <div class="error-text">{{ errors.address }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Save</button>
+                <a href="{% url 'home' %}" class="btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.profile-hero {
+    text-align: center;
+    padding: 60px 20px;
+    background-color: #0A2342;
+    color: white;
+    border-radius: 12px;
+    margin-bottom: 40px;
+}
+
+.profile-hero span {
+    color: #C8102E;
+}
+
+.profile-container {
+    display: flex;
+    justify-content: center;
+}
+
+.profile-card {
+    background-color: #f8f9fa;
+    padding: 30px;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 500px;
+}
+
+.form-label {
+    font-weight: bold;
+    margin-bottom: 6px;
+    display: block;
+}
+
+.form-input {
+    width: 100%;
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    margin-bottom: 6px;
+}
+
+.input-error {
+    border-color: #C8102E;
+    background-color: #fff5f5;
+}
+
+.error-text {
+    color: #C8102E;
+    font-size: 0.85rem;
+    margin-bottom: 10px;
+}
+
+.alert {
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+
+.alert-error {
+    background-color: #ffe5e5;
+    color: #a30000;
+}
+
+.alert-success {
+    background-color: #e6f7e6;
+    color: #1e7e34;
+}
+
+.form-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.btn-primary {
+    flex: 1;
+    background-color: #C8102E;
+    color: white;
+    padding: 12px;
+    border: none;
+    border-radius: 6px;
+}
+
+.btn-secondary {
+    flex: 1;
+    border: 2px solid #C8102E;
+    color: #C8102E;
+    padding: 12px;
+    text-align: center;
+    border-radius: 6px;
+}
+</style>
+
+{% endblock %}

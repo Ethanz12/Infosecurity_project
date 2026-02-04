@@ -1,0 +1,19 @@
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('', views.index, name='home'),
+    path('login/', views.login_view, name='login'),
+    path('logout/', views.logout_view, name='logout'),
+    path('register/', views.register_view, name='register'),
+    path('test-db/', views.test_db_connection, name='test_db'),
+    path("staff/", views.staff_page, name="staff_page"),
+    path('profile/', views.profile_view, name='profile'),
+    path('upload/', views.upload_file, name='upload_file'),
+    path('files/', views.file_list, name='file_list'),
+    path('download/<int:file_id>/', views.download_file, name='download_file'),
+    path('tickets/', views.ticket_list, name='ticket_list'),
+    path('tickets/create/', views.create_ticket, name='create_ticket'),
+    path('tickets/<int:ticket_id>/', views.ticket_detail, name='ticket_detail'),
+]
+

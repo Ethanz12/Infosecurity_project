@@ -1,0 +1,103 @@
+{% include 'home/base.html' %}
+
+<div class="container">
+    <h1>Login</h1>
+    <p>Welcome back! Please enter your credentials.</p>
+
+    <!-- Messages -->
+    {% if messages %}
+    <ul class="messages">
+        {% for message in messages %}
+        <li class="{% if message.tags %}{{ message.tags }}{% endif %}">{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    <form method="post" class="form-card">
+        {% csrf_token %}
+
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" placeholder="Enter username" required>
+
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" placeholder="Enter password" required>
+
+        <button type="submit" class="btn-primary">Login</button>
+    </form>
+
+    <div style="margin-top:10px; text-align:center;">
+        <a href="{% url 'register' %}">Don't have an account? Register here</a>
+    </div>
+</div>
+
+<style>
+/* Container */
+.container {
+    max-width: 500px;
+    margin: 50px auto;
+    padding: 20px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    background-color: #f8f9fa;
+}
+
+/* Form Styling */
+.form-card label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+    color: #0A2342;
+}
+
+.form-card input {
+    width: 100%;
+    padding: 8px 10px;
+    margin-bottom: 15px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+/* Button */
+.btn-primary {
+    width: 100%;
+    padding: 10px;
+    background-color: #0A2342;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.btn-primary:hover {
+    background-color: #08304d;
+}
+
+/* Messages */
+.messages {
+    list-style-type: none;
+    padding: 0;
+    margin-top: 15px;
+}
+
+.messages li {
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    font-weight: bold;
+}
+
+/* Success messages */
+.messages li.success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+/* Error messages */
+.messages li.error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+</style>
