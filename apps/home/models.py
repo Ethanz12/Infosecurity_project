@@ -2,11 +2,24 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-# Ensure this import works in your docker container
 from security.crypto import encrypt, decrypt 
 
+# --- CONFIGURATION: Singapore Departments (ABAC Attributes) ---
+DEPARTMENTS = [
+    ('HEALTH', 'Health (MOH)'),
+    ('FINANCE', 'Finance (MOF/IRAS)'),
+    ('GENERAL', 'General / Municipal (Town Council)'),
+]
 
-# Citizen Profile
+# --- CONFIGURATION: Access Levels (New Attribute) ---
+ACCESS_LEVELS = [
+    (1, 'Junior Officer'),
+    (2, 'Senior Manager'),
+]
+
+# ----------------------------
+# Citizen Profile (Unchanged)
+# ----------------------------
 
 class CitizenProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
@@ -55,6 +68,9 @@ def save_citizen_profile(sender, instance, **kwargs):
         instance.citizenprofile.save()
 
 
+# ----------------------------
+# UploadedFile (Unchanged - Teammate's Work)
+# ----------------------------
 
 class UploadedFile(models.Model):
     CLASSIFICATION_CHOICES = [
@@ -101,8 +117,9 @@ class UploadedFile(models.Model):
         return colors.get(self.classification, '#6c757d')
 
 
-
-#  Ticket System 
+# ----------------------------
+# Ticket System (Updated for ABAC - Departments + Levels)
+# ----------------------------
 
 class Ticket(models.Model):
     STATUS_CHOICES = [
@@ -110,6 +127,11 @@ class Ticket(models.Model):
         ('IN_PROGRESS', 'In Progress'),
         ('RESOLVED', 'Resolved'),
         ('CLOSED', 'Closed'),
+    ]
+    
+    TICKET_SENSITIVITY = [
+        (1, 'Normal - Viewable by all staff'),
+        (2, 'Sensitive - Senior Staff Only'),
     ]
 
     # Link to the Citizen who created it
@@ -119,6 +141,23 @@ class Ticket(models.Model):
     subject = models.CharField(max_length=200)
     description = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='OPEN')
+
+    # --- ATTRIBUTE 1: Department Routing ---
+    department = models.CharField(
+        max_length=50, 
+        choices=DEPARTMENTS, 
+        default='GENERAL',
+        help_text="The government department this ticket belongs to."
+    )
+
+    # --- ATTRIBUTE 2: Sensitivity Level ---
+    # Citizens don't set this; it defaults to 1. 
+    # Logic: Gov Staff can escalate a ticket to Level 2 (Sensitive), hiding it from Juniors.
+    min_clearance = models.IntegerField(
+        choices=TICKET_SENSITIVITY, 
+        default=1,
+        help_text="Minimum clearance level required to view this ticket."
+    )
     
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -137,4 +176,30 @@ class Ticket(models.Model):
     )
 
     def __str__(self):
-        return f"[{self.status}] {self.subject} (by {self.citizen.username})"
+        return f"[{self.get_department_display()}] {self.subject} (Lvl {self.min_clearance})"
+
+
+# ----------------------------
+# Staff Profile (Updated for ABAC - Departments + Levels)
+# ----------------------------
+
+class StaffProfile(models.Model):
+    """
+    Stores the 'Attributes' for government workers.
+    This avoids creating roles like 'Senior Health Officer'.
+    Instead, we check: if user.dept == ticket.dept AND user.level >= ticket.min_clearance
+    """
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    
+    # Attribute 1: Department
+    department = models.CharField(max_length=50, choices=DEPARTMENTS)
+    
+    # Attribute 2: Seniority / Clearance Level
+    security_level = models.IntegerField(
+        choices=ACCESS_LEVELS, 
+        default=1,
+        help_text="1 = Junior (Normal Access), 2 = Senior (Can see sensitive tickets)"
+    )
+
+    def __str__(self):
+        return f"{self.user.username} | {self.get_department_display()} | Lvl {self.security_level}"
