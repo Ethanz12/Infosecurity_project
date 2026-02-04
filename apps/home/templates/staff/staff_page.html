@@ -1,6 +1,103 @@
 {% extends "home/base.html" %}
 
 {% block content %}
-<h2>Staff Dashboard</h2>
-<p>Works.</p>
+<div class="container mt-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>🏛️ Government Staff Portal</h2>
+        <span class="badge bg-secondary">Official Use Only</span>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4 mb-4">
+            <div class="card shadow-sm border-primary h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Staff Identity</h5>
+                </div>
+                <div class="card-body">
+                    <div class="text-center mb-3">
+                        <div style="font-size: 3rem;">👮‍♂️</div>
+                        <h4 class="mt-2">{{ user.username|title }}</h4>
+                        <p class="text-muted">{{ user.email }}</p>
+                    </div>
+                    
+                    <hr>
+
+                    <dl class="row">
+                        <dt class="col-sm-5">Department:</dt>
+                        <dd class="col-sm-7 fw-bold text-primary">
+                            {% if user.staffprofile %}
+                                {{ user.staffprofile.get_department_display }}
+                            {% else %}
+                                <span class="text-danger">Not Assigned</span>
+                            {% endif %}
+                        </dd>
+
+                        <dt class="col-sm-5">Clearance:</dt>
+                        <dd class="col-sm-7">
+                            {% if user.staffprofile %}
+                                {% if user.staffprofile.security_level >= 2 %}
+                                    <span class="badge bg-danger">Level 2 (Senior)</span>
+                                {% else %}
+                                    <span class="badge bg-info text-dark">Level 1 (Junior)</span>
+                                {% endif %}
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </dd>
+
+                        <dt class="col-sm-5">Location Access:</dt>
+                        <dd class="col-sm-7">
+                            {% if user.staffprofile.can_access_location %}
+                                <span class="badge bg-success">GRANTED</span>
+                            {% else %}
+                                <span class="badge bg-secondary">RESTRICTED</span>
+                            {% endif %}
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <h4 class="card-title">My Tasks</h4>
+                    <p class="card-text">
+                        You are authorized to view tickets routed to 
+                        <strong>{{ user.staffprofile.get_department_display }}</strong> 
+                        with a sensitivity level of 
+                        <strong>{{ user.staffprofile.security_level }}</strong> or lower.
+                    </p>
+                    
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'ticket_list' %}" class="btn btn-primary btn-lg">
+                            📂 Access Department Tickets
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="card h-100 bg-light border-0">
+                        <div class="card-body text-center">
+                            <h5>Search Database</h5>
+                            <p class="small text-muted">Lookup citizen records (Audit logged)</p>
+                            <button class="btn btn-outline-secondary btn-sm" disabled>Coming Soon</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card h-100 bg-light border-0">
+                        <div class="card-body text-center">
+                            <h5>Upload Internal Files</h5>
+                            <p class="small text-muted">Secure S3 Storage for sensitive docs</p>
+                            <a href="{% url 'upload_file' %}" class="btn btn-outline-dark btn-sm">Go to Uploads</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
