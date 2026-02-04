@@ -13,6 +13,9 @@
         <label for="email">Email</label>
         <input type="email" id="email" name="email" placeholder="Enter email" required>
 
+        <label for="nric">NRIC (Identity Number)</label>
+        <input type="text" id="nric" name="nric" placeholder="e.g. S1234567A" required style="text-transform: uppercase;">
+
         <label for="password">Password</label>
         <input type="password" id="password" name="password" placeholder="Enter password" required>
 
@@ -56,6 +59,8 @@
     margin-bottom: 15px;
     border: 1px solid #ccc;
     border-radius: 5px;
+    /* Ensure padding doesn't affect width */
+    box-sizing: border-box; 
 }
 
 /* Button */
