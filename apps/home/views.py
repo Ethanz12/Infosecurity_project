@@ -77,9 +77,14 @@ def mask_phone(phone: str):
 class CitizenProfileForm(forms.Form):
     nric = forms.CharField(max_length=9, required=False)
     phone = forms.CharField(max_length=15, required=False)
-    address = forms.CharField(
-        widget=forms.Textarea(attrs={"rows": 3}),
-        required=False
+    address = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), required=False)
+    
+    # --- NEW FIELDS ---
+    blood_type = forms.CharField(max_length=5, required=False, label="Blood Type")
+    dental_stuff = forms.CharField(
+        widget=forms.Textarea(attrs={"rows": 3, "placeholder": "Dental records..."}), 
+        required=False, 
+        label="Dental Information"
     )
 
     def clean_nric(self):
@@ -135,16 +140,26 @@ def profile_view(request):
             nric = form.cleaned_data.get("nric")
             phone = form.cleaned_data.get("phone")
             address = form.cleaned_data.get("address")
+            
+            # --- NEW FIELDS ---
+            blood_type = form.cleaned_data.get("blood_type")
+            dental_stuff = form.cleaned_data.get("dental_stuff")
 
             def is_masked(value):
                 return value and "*" in value
 
             if nric and not is_masked(nric):
-                profile.set_nric(nric)  # encryption
+                profile.set_nric(nric)
             if phone and not is_masked(phone):
-                profile.set_phone(phone)  # encryption
+                profile.set_phone(phone)
             if address:
                 profile.set_address(address)
+            
+            # --- SAVE NEW FIELDS ---
+            if blood_type:
+                profile.blood_type = blood_type
+            if dental_stuff:
+                profile.dental_stuff = dental_stuff
 
             # Update full name & email
             full_name = request.POST.get("full_name", "").strip()
@@ -163,30 +178,22 @@ def profile_view(request):
             messages.success(request, "Profile updated successfully.")
             return redirect("profile")
 
-        else:
-            # Form has errors → mask NRIC/phone before sending to template
-            raw_nric = request.POST.get("nric", "")
-            raw_phone = request.POST.get("phone", "")
-
-            context = {
-                "form_data": request.POST,
-                "errors": {k: v[0] for k, v in form.errors.items()},
-                "user": request.user,
-                "masked_nric": mask_nric(profile.get_nric() if "*" in raw_nric else raw_nric),
-                "masked_phone": mask_phone(profile.get_phone() if "*" in raw_phone else raw_phone),
-            }
-            return render(request, "home/profile.html", context)
-
+    # --- GET REQUEST HANDLING ---
     else:
-        # GET request
+        # Pre-fill form with existing data
+        initial_data = {
+            "full_name": request.user.get_full_name(),
+            "email": request.user.email,
+            "nric": mask_nric(profile.get_nric()),
+            "phone": mask_phone(profile.get_phone()),
+            "address": profile.get_address(),
+            # Load existing values
+            "blood_type": profile.blood_type,
+            "dental_stuff": profile.dental_stuff,
+        }
+        
         context = {
-            "form_data": {
-                "full_name": request.user.get_full_name(),
-                "email": request.user.email,
-                "nric": mask_nric(profile.get_nric()),
-                "phone": mask_phone(profile.get_phone()),
-                "address": profile.get_address(),
-            },
+            "form_data": initial_data,
             "errors": {},
             "user": request.user,
             "masked_nric": mask_nric(profile.get_nric()),
@@ -500,44 +507,57 @@ def create_ticket(request):
     return render(request, "tickets/create_ticket.html", {"departments": DEPARTMENTS})
 
 
+# home/views.py
+
+@login_required
+def create_ticket(request):
+    if request.method == "POST":
+        subject = request.POST.get("subject", "").strip()
+        description = request.POST.get("description", "").strip()
+        department = request.POST.get("department")
+        category = request.POST.get("category")
+
+        if not subject or not description:
+            messages.error(request, "Subject and Description are required.")
+            return redirect("create_ticket")
+
+        Ticket.objects.create(
+            citizen=request.user,
+            subject=subject,
+            description=description,
+            department=department,
+            category=category
+        )
+        messages.success(request, "Ticket created successfully.")
+        return redirect("ticket_list")
+
+    return render(request, "tickets/create_ticket.html", {
+        "departments": DEPARTMENTS,
+        "categories": Ticket.CATEGORY_CHOICES
+    })
+
 @login_required
 def ticket_list(request):
     user = request.user
-    
-    # Logic: 
-    # - Citizens see ONLY their own tickets.
-    # - Gov Workers see tickets based on Attribute Access (Dept + Role)
-    
     is_gov = user.groups.filter(name="GovernmentWorker").exists() or user.is_staff
 
     if is_gov:
-        # --- ABAC LOGIC ---
         try:
-            # 1. Get User Attributes
-            staff_profile = StaffProfile.objects.get(user=user)
-            
-            # 2. Filter Resources
-            # Rule: Ticket Dept == User Dept  AND  Ticket Level <= User Level
+            staff = StaffProfile.objects.get(user=user)
+            # Filter: Same Dept + Sufficient Clearance
             tickets = Ticket.objects.filter(
-                department=staff_profile.department,
-                min_clearance__lte=staff_profile.security_level
+                department=staff.department,
+                min_clearance__lte=staff.security_level
             ).order_by('-created_at')
-            
-            messages.info(request, f"Viewing {staff_profile.get_department_display()} Tickets.")
-
+            messages.info(request, f"Viewing {staff.get_department_display()} Tickets.")
         except StaffProfile.DoesNotExist:
-            if user.is_superuser:
-                tickets = Ticket.objects.all().order_by('-created_at')
-            else:
-                tickets = Ticket.objects.none()
-                messages.warning(request, "Account Error: No Department Attributes found.")
-        # ------------------
+            tickets = Ticket.objects.all() if user.is_superuser else Ticket.objects.none()
     else:
+        # Citizen: View own tickets
         tickets = Ticket.objects.filter(citizen=user).order_by('-created_at')
         is_gov = False
 
     return render(request, "tickets/ticket_list.html", {"tickets": tickets, "is_gov": is_gov})
-
 
 @login_required
 def ticket_detail(request, ticket_id):
@@ -546,51 +566,49 @@ def ticket_detail(request, ticket_id):
     
     is_gov = user.groups.filter(name="GovernmentWorker").exists() or user.is_staff
     is_owner = (ticket.citizen == user)
-
-    # Security Check: Only Owner or Gov Worker (With correct Attributes) can view
     has_access = False
 
+    # --- ACCESS CONTROL LOGIC ---
     if is_owner:
         has_access = True
     elif is_gov:
         if user.is_superuser:
             has_access = True
         else:
-            try:
-                # ABAC Check
-                staff = StaffProfile.objects.get(user=user)
-                if staff.department == ticket.department and staff.security_level >= ticket.min_clearance:
-                    has_access = True
-            except StaffProfile.DoesNotExist:
-                has_access = False
+            # Check Dental Restriction
+            if ticket.category == 'DENTAL':
+                has_access = (user.username == "EthanLim")
+            else:
+                # Check Standard Access
+                try:
+                    staff = StaffProfile.objects.get(user=user)
+                    if staff.department == ticket.department and staff.security_level >= ticket.min_clearance:
+                        has_access = True
+                except StaffProfile.DoesNotExist:
+                    has_access = False
 
     if not has_access:
+        if is_gov and ticket.category == 'DENTAL':
+             return HttpResponseForbidden("Access Denied: Dental records are restricted to Specialist (EthanLim).")
         return HttpResponseForbidden("Access Denied: Insufficient Department or Seniority clearance.")
 
-    if request.method == "POST":
-        # Only Gov Workers can reply/update status
-        if is_gov:
-            new_status = request.POST.get("status")
-            response = request.POST.get("gov_response")
-            new_sensitivity = request.POST.get("sensitivity")
-            
-            if new_status:
-                ticket.status = new_status
-            if response:
-                ticket.gov_response = response
-                # Auto-assign if replying and not yet assigned
-                if not ticket.assigned_to:
-                    ticket.assigned_to = user
-            
-            # Senior staff can change sensitivity
-            if new_sensitivity:
-                ticket.min_clearance = int(new_sensitivity)
-            
-            ticket.save()
-            messages.success(request, "Ticket updated.")
-            return redirect("ticket_detail", ticket_id=ticket.id)
+    # --- HANDLING UPDATES (POST) ---
+    if request.method == "POST" and is_gov:
+        new_status = request.POST.get("status")
+        response = request.POST.get("gov_response")
+        new_sensitivity = request.POST.get("sensitivity")
+        
+        if new_status: ticket.status = new_status
+        if response:
+            ticket.gov_response = response
+            if not ticket.assigned_to: ticket.assigned_to = user
+        if new_sensitivity: ticket.min_clearance = int(new_sensitivity)
+        
+        ticket.save()
+        messages.success(request, "Ticket updated.")
+        return redirect("ticket_detail", ticket_id=ticket.id)
 
-    # Data to show
+    # --- PREPARE DATA ---
     context = {
         "ticket": ticket,
         "is_gov": is_gov,
@@ -598,15 +616,20 @@ def ticket_detail(request, ticket_id):
     }
 
     if is_gov:
-        # Limited View for Gov Workers (Privacy)
         try:
             profile = ticket.citizen.citizenprofile
             citizen_info = {
                 "username": ticket.citizen.username,
                 "email": ticket.citizen.email,
-                "phone": mask_phone(profile.get_phone()), # Using your helper function
-                # NRIC is intentionally hidden
+                "phone": mask_phone(profile.get_phone()),
+                "blood_type": profile.blood_type,
             }
+            # Restrict Dental Info in View
+            if user.username == "EthanLim":
+                citizen_info["dental_stuff"] = profile.dental_stuff
+            else:
+                citizen_info["dental_stuff"] = "RESTRICTED: AUTHORIZED PERSONNEL (EthanLim) ONLY"
+                
             context["citizen_info"] = citizen_info
         except:
             context["citizen_info"] = None

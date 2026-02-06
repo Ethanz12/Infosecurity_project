@@ -56,6 +56,7 @@ config = [
     ('HEALTH_USER', 'HEALTH_PASS', 'HEALTH', 2),
     ('FINANCE_USER', 'FINANCE_PASS', 'FINANCE', 2),
     ('GENERAL_USER', 'GENERAL_PASS', 'GENERAL', 1),
+    ('HEALTH_USER1', 'HEALTH_PASS1', 'HEALTH', 2),
 ]
 
 gov_group = Group.objects.get(name='GovernmentWorker')

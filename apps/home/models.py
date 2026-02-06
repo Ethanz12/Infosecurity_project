@@ -9,16 +9,18 @@ DEPARTMENTS = [
     ('HEALTH', 'Health (MOH)'),
     ('FINANCE', 'Finance (MOF/IRAS)'),
     ('GENERAL', 'General / Municipal (Town Council)'),
+    ('HR', 'Human Resources'), 
 ]
 
 # --- CONFIGURATION: Access Levels (New Attribute) ---
 ACCESS_LEVELS = [
     (1, 'Junior Officer'),
     (2, 'Senior Manager'),
+    (3, 'Director'), 
 ]
 
 # ----------------------------
-# Citizen Profile (Unchanged)
+# Citizen Profile (Health Info Included)
 # ----------------------------
 
 class CitizenProfile(models.Model):
@@ -28,6 +30,14 @@ class CitizenProfile(models.Model):
     encrypted_nric = models.TextField(blank=True, null=True)
     encrypted_address = models.TextField(blank=True, null=True)
     encrypted_phone = models.TextField(blank=True, null=True)
+
+    # --- NEW HEALTH FIELDS ---
+    # 1. Blood Type: Generally viewable by Health Dept
+    blood_type = models.CharField(max_length=5, blank=True, null=True)
+
+    # 2. Dental Stuff: RESTRICTED
+    # Logic in views.py ensures ONLY 'EthanLim' sees this.
+    dental_stuff = models.TextField(blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -69,7 +79,7 @@ def save_citizen_profile(sender, instance, **kwargs):
 
 
 # ----------------------------
-# UploadedFile (Unchanged - Teammate's Work)
+# UploadedFile (Unchanged)
 # ----------------------------
 
 class UploadedFile(models.Model):
@@ -118,7 +128,7 @@ class UploadedFile(models.Model):
 
 
 # ----------------------------
-# Ticket System (Updated for ABAC - Departments + Levels)
+# Ticket System (Updated with Categories)
 # ----------------------------
 
 class Ticket(models.Model):
@@ -132,6 +142,13 @@ class Ticket(models.Model):
     TICKET_SENSITIVITY = [
         (1, 'Normal - Viewable by all staff'),
         (2, 'Sensitive - Senior Staff Only'),
+    ]
+
+    # --- NEW: Service Category Choices ---
+    CATEGORY_CHOICES = [
+        ('GENERAL', 'General Inquiry'),
+        ('BLOOD', 'Blood Checkup'),
+        ('DENTAL', 'Dental Checkup'), # Restricted to EthanLim
     ]
 
     # Link to the Citizen who created it
@@ -150,9 +167,15 @@ class Ticket(models.Model):
         help_text="The government department this ticket belongs to."
     )
 
-    # --- ATTRIBUTE 2: Sensitivity Level ---
-    # Citizens don't set this; it defaults to 1. 
-    # Logic: Gov Staff can escalate a ticket to Level 2 (Sensitive), hiding it from Juniors.
+    # --- NEW ATTRIBUTE: Service Category ---
+    category = models.CharField(
+        max_length=20, 
+        choices=CATEGORY_CHOICES, 
+        default='GENERAL',
+        help_text="Specifies the type of checkup (e.g. Dental vs Blood)."
+    )
+
+    # --- ATTRIBUTE 3: Sensitivity Level ---
     min_clearance = models.IntegerField(
         choices=TICKET_SENSITIVITY, 
         default=1,
@@ -163,7 +186,7 @@ class Ticket(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # Government Worker Response (Optional)
+    # Government Worker Response
     gov_response = models.TextField(blank=True, null=True)
     
     # Optional: Link to a specific Gov Worker if they "claim" the ticket
@@ -176,19 +199,14 @@ class Ticket(models.Model):
     )
 
     def __str__(self):
-        return f"[{self.get_department_display()}] {self.subject} (Lvl {self.min_clearance})"
+        return f"[{self.get_department_display()}] {self.subject} ({self.get_category_display()})"
 
 
 # ----------------------------
-# Staff Profile (Updated for ABAC - Departments + Levels)
+# Staff Profile (Unchanged)
 # ----------------------------
 
 class StaffProfile(models.Model):
-    """
-    Stores the 'Attributes' for government workers.
-    This avoids creating roles like 'Senior Health Officer'.
-    Instead, we check: if user.dept == ticket.dept AND user.level >= ticket.min_clearance
-    """
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     
     # Attribute 1: Department
@@ -198,7 +216,7 @@ class StaffProfile(models.Model):
     security_level = models.IntegerField(
         choices=ACCESS_LEVELS, 
         default=1,
-        help_text="1 = Junior (Normal Access), 2 = Senior (Can see sensitive tickets)"
+        help_text="1 = Junior, 2 = Senior, 3 = Director"
     )
 
     def __str__(self):

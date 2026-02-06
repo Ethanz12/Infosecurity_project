@@ -24,6 +24,8 @@
         <form method="POST" novalidate>
             {% csrf_token %}
 
+            <h3 class="section-title">Personal Details</h3>
+
             <div class="mb-3">
                 <label class="form-label">Full Name</label>
                 <input type="text"
@@ -78,8 +80,35 @@
                 {% endif %}
             </div>
 
-            <div class="form-actions">
-                <button type="submit" class="btn-primary">Save</button>
+            <hr class="divider">
+
+            <h3 class="section-title" style="color: #C8102E;">Medical Information</h3>
+
+            <div class="mb-3">
+                <label class="form-label">Blood Type</label>
+                <input type="text"
+                       class="form-input"
+                       name="blood_type"
+                       placeholder="e.g. O+, A-, AB"
+                       value="{{ form_data.blood_type|default:'' }}">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">
+                    Dental Information 
+                    <span class="lock-icon">🔒 Restricted</span>
+                </label>
+                <p class="small-text">
+                    Strictly confidential. Only authorized specialists (EthanLim) can view this.
+                </p>
+                <textarea class="form-input"
+                          name="dental_stuff"
+                          rows="3"
+                          placeholder="Enter dental records or history here...">{{ form_data.dental_stuff|default:'' }}</textarea>
+            </div>
+
+            <div class="form-actions mt-4">
+                <button type="submit" class="btn-primary">Save Profile</button>
                 <a href="{% url 'home' %}" class="btn-secondary">Cancel</a>
             </div>
         </form>
@@ -87,6 +116,7 @@
 </div>
 
 <style>
+/* Existing Styles */
 .profile-hero {
     text-align: center;
     padding: 60px 20px;
@@ -95,30 +125,17 @@
     border-radius: 12px;
     margin-bottom: 40px;
 }
-
-.profile-hero span {
-    color: #C8102E;
-}
-
-.profile-container {
-    display: flex;
-    justify-content: center;
-}
-
+.profile-hero span { color: #C8102E; }
+.profile-container { display: flex; justify-content: center; }
 .profile-card {
     background-color: #f8f9fa;
     padding: 30px;
     border-radius: 12px;
     width: 100%;
     max-width: 500px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
-
-.form-label {
-    font-weight: bold;
-    margin-bottom: 6px;
-    display: block;
-}
-
+.form-label { font-weight: bold; margin-bottom: 6px; display: block; }
 .form-input {
     width: 100%;
     padding: 12px;
@@ -126,39 +143,12 @@
     border: 1px solid #ccc;
     margin-bottom: 6px;
 }
-
-.input-error {
-    border-color: #C8102E;
-    background-color: #fff5f5;
-}
-
-.error-text {
-    color: #C8102E;
-    font-size: 0.85rem;
-    margin-bottom: 10px;
-}
-
-.alert {
-    padding: 12px;
-    border-radius: 6px;
-    margin-bottom: 20px;
-}
-
-.alert-error {
-    background-color: #ffe5e5;
-    color: #a30000;
-}
-
-.alert-success {
-    background-color: #e6f7e6;
-    color: #1e7e34;
-}
-
-.form-actions {
-    display: flex;
-    gap: 12px;
-}
-
+.input-error { border-color: #C8102E; background-color: #fff5f5; }
+.error-text { color: #C8102E; font-size: 0.85rem; margin-bottom: 10px; }
+.alert { padding: 12px; border-radius: 6px; margin-bottom: 20px; }
+.alert-error { background-color: #ffe5e5; color: #a30000; }
+.alert-success { background-color: #e6f7e6; color: #1e7e34; }
+.form-actions { display: flex; gap: 12px; }
 .btn-primary {
     flex: 1;
     background-color: #C8102E;
@@ -166,8 +156,10 @@
     padding: 12px;
     border: none;
     border-radius: 6px;
+    cursor: pointer;
+    text-decoration: none;
+    text-align: center;
 }
-
 .btn-secondary {
     flex: 1;
     border: 2px solid #C8102E;
@@ -175,7 +167,39 @@
     padding: 12px;
     text-align: center;
     border-radius: 6px;
+    text-decoration: none;
 }
+
+/* NEW STYLES Added for this update */
+.section-title {
+    font-size: 1.2rem;
+    color: #0A2342;
+    margin-bottom: 15px;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 5px;
+}
+.divider {
+    border: 0;
+    height: 1px;
+    background: #ccc;
+    margin: 30px 0;
+}
+.lock-icon {
+    font-size: 0.8rem;
+    background-color: #e9ecef;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #495057;
+    margin-left: 8px;
+    font-weight: normal;
+}
+.small-text {
+    font-size: 0.8rem;
+    color: #6c757d;
+    margin-bottom: 8px;
+    margin-top: -4px;
+}
+.mt-4 { margin-top: 1.5rem; }
 </style>
 
 {% endblock %}
