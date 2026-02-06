@@ -15,7 +15,19 @@
                     <option value="{{ code }}">{{ name }}</option>
                 {% endfor %}
             </select>
-            <div class="form-text">This helps route your request to the correct staff.</div>
+            <div class="form-text">This routes your request to the correct agency.</div>
+        </div>
+
+        <div class="mb-3">
+            <label for="category" class="form-label">Service Type (For Health Dept)</label>
+            <select name="category" id="category" class="form-select" required>
+                {% for code, label in categories %}
+                    <option value="{{ code }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+            <div class="form-text text-danger">
+                * Note: Dental Checkups are strictly confidential and routed to specific specialists.
+            </div>
         </div>
         
         <div class="mb-3">
