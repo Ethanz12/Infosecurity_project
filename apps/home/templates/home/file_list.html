@@ -18,6 +18,7 @@
             <th>Type</th>
             <th>Upload Date</th>
             <th>Classification</th>
+            <th>Malware Scan</th>
             <th>Actions</th>
         </tr>
     </thead>
@@ -41,6 +42,33 @@
                     {% endif %}
                 {% else %}
                     <span style="color: #999;">Pending</span>
+                {% endif %}
+            </td>
+            <td>
+                {% if file.malware_scan_status == 'CLEAN' %}
+                    <span class="badge" style="background-color: #28a745; color: white;">
+                        ✓ CLEAN
+                    </span>
+                {% elif file.malware_scan_status == 'INFECTED' %}
+                    <span class="badge" style="background-color: #dc3545; color: white;">
+                        🦠 INFECTED
+                    </span>
+                    {% if file.virus_name %}
+                        <small style="color: #dc3545; display: block; margin-top: 4px;">
+                            {{ file.virus_name }}
+                        </small>
+                    {% endif %}
+                {% elif file.malware_scan_status == 'ERROR' %}
+                    <span class="badge" style="background-color: #ffc107; color: black;">
+                        ⚠️ SCAN ERROR
+                    </span>
+                {% else %}
+                    <span style="color: #999;">Pending</span>
+                {% endif %}
+                {% if file.malware_scan_date %}
+                    <small style="color: #666; display: block; margin-top: 4px;">
+                        {{ file.malware_scan_date|date:"Y-m-d H:i" }}
+                    </small>
                 {% endif %}
             </td>
             <td>
