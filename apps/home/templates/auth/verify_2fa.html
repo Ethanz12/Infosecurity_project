@@ -1,0 +1,108 @@
+{% extends "home/base.html" %}
+
+{% block title %}Verify Login - SecureGov{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 500px; margin-top: 50px;">
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white text-center">
+            <h3>🔐 Verify Your Login</h3>
+        </div>
+        
+        <div class="card-body">
+            <div class="alert alert-info">
+                <strong>📧 Check your email!</strong><br>
+                A 6-digit verification code has been sent to <strong>{{ user_email }}</strong>
+            </div>
+            
+            <form method="post" class="mt-4">
+                {% csrf_token %}
+                
+                <div class="mb-3">
+                    <label for="code" class="form-label">Enter Verification Code</label>
+                    <input type="text" 
+                           id="code" 
+                           name="code" 
+                           class="form-control text-center" 
+                           placeholder="000000" 
+                           maxlength="6"
+                           pattern="\d{6}"
+                           style="font-size: 24px; letter-spacing: 8px; font-weight: bold;"
+                           required 
+                           autofocus>
+                    <div class="form-text">Code expires in <span id="timer">5:00</span></div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary w-100 mb-3">
+                    ✓ Verify & Login
+                </button>
+            </form>
+            
+            <div class="text-center">
+                <p class="text-muted mb-2">Didn't receive the code?</p>
+                <a href="{% url 'resend_2fa' %}" class="btn btn-outline-secondary btn-sm">
+                    📨 Resend Code
+                </a>
+                <br><br>
+                <a href="{% url 'logout' %}" class="text-muted small">Cancel & Logout</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if time_remaining %}
+<script>
+var timeRemaining = parseInt("{{ time_remaining }}");
+
+function updateTimer() {
+    var minutes = Math.floor(timeRemaining / 60);
+    var seconds = timeRemaining % 60;
+    var timerElement = document.getElementById('timer');
+    
+    timerElement.textContent = minutes.toString() + ':' + (seconds < 10 ? '0' : '') + seconds.toString();
+    
+    if (timeRemaining > 0) {
+        timeRemaining = timeRemaining - 1;
+        setTimeout(updateTimer, 1000);
+    } else {
+        timerElement.textContent = 'EXPIRED';
+        timerElement.style.color = 'red';
+    }
+}
+
+updateTimer();
+</script>
+{% endif %}
+
+<script>
+document.getElementById('code').addEventListener('input', function(e) {
+    var inputField = this;
+    if (inputField.value.length === 6) {
+        var theForm = inputField.form;
+        setTimeout(function() {
+            theForm.submit();
+        }, 300);
+    }
+});
+</script>
+
+<style>
+.card {
+    border-radius: 15px;
+    overflow: hidden;
+}
+
+.card-header {
+    padding: 20px;
+}
+
+input#code {
+    border: 2px solid #0A2342;
+}
+
+input#code:focus {
+    border-color: #C8102E;
+    box-shadow: 0 0 0 0.2rem rgba(200, 16, 46, 0.25);
+}
+</style>
+{% endblock %}

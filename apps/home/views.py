@@ -15,6 +15,11 @@ from .models import Ticket
 
 from .models import CitizenProfile
 
+from django.utils import timezone
+from datetime import timedelta
+from .models import TwoFactorCode, CitizenProfile
+from .email_utils import send_2fa_code_email
+
 #S3 Stuff
 import boto3
 from botocore.exceptions import ClientError
@@ -279,6 +284,16 @@ def register_view(request):
     return render(request, "register/register.html")
 
 
+def get_client_ip(request):
+    """Get client IP address"""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0]
+    else:
+        ip = request.META.get('REMOTE_ADDR')
+    return ip
+
+
 def login_view(request):
     if request.method == "POST":
         username = request.POST.get("username", "").lower()
@@ -286,14 +301,46 @@ def login_view(request):
         user = authenticate(request, username=username, password=password)
 
         if user:
-            login(request, user)
-            return redirect("home")
-
-        messages.error(request, "Invalid credentials.")
-        return redirect("login")
+            # Check if 2FA is enabled
+            try:
+                profile = CitizenProfile.objects.get(user=user)
+                if profile.two_factor_enabled:
+                    # Generate 2FA code
+                    code = TwoFactorCode.generate_code()
+                    expires_at = timezone.now() + timedelta(minutes=5)
+                    
+                    TwoFactorCode.objects.create(
+                        user=user,
+                        code=code,
+                        expires_at=expires_at,
+                        ip_address=get_client_ip(request)
+                    )
+                    
+                    # Send email
+                    email_sent = send_2fa_code_email(user, code, get_client_ip(request))
+                    
+                    if email_sent:
+                        # Store user ID in session temporarily
+                        request.session['pending_2fa_user_id'] = user.id
+                        messages.success(request, f"Verification code sent to {user.email}")
+                        return redirect("verify_2fa")
+                    else:
+                        messages.error(request, "Failed to send verification code. Please try again.")
+                        return redirect("login")
+                else:
+                    # 2FA not enabled, log in directly
+                    login(request, user)
+                    return redirect("home")
+                    
+            except CitizenProfile.DoesNotExist:
+                # No profile = no 2FA
+                login(request, user)
+                return redirect("home")
+        else:
+            messages.error(request, "Invalid credentials.")
+            return redirect("login")
 
     return render(request, "register/login.html")
-
 
 @login_required
 def logout_view(request):
@@ -635,3 +682,152 @@ def ticket_detail(request, ticket_id):
             context["citizen_info"] = None
 
     return render(request, "tickets/ticket_detail.html", context)
+
+
+
+def verify_2fa(request):
+    """Verify 2FA code"""
+    
+    # Check if user has pending 2FA
+    pending_user_id = request.session.get('pending_2fa_user_id')
+    if not pending_user_id:
+        messages.error(request, "No pending verification. Please log in first.")
+        return redirect("login")
+    
+    from django.contrib.auth.models import User
+    user = User.objects.get(id=pending_user_id)
+    
+    if request.method == "POST":
+        entered_code = request.POST.get("code", "").strip()
+        
+        # Find valid code
+        valid_code = TwoFactorCode.objects.filter(
+            user=user,
+            code=entered_code,
+            is_used=False,
+            expires_at__gt=timezone.now()
+        ).first()
+        
+        if valid_code:
+            # Mark code as used
+            valid_code.is_used = True
+            valid_code.save()
+            
+            # Log user in
+            login(request, user)
+            
+            # Clear session data
+            del request.session['pending_2fa_user_id']
+            
+            messages.success(request, "Login successful!")
+            return redirect("home")
+        else:
+            # Check if code exists but is expired
+            expired_code = TwoFactorCode.objects.filter(
+                user=user,
+                code=entered_code,
+                is_used=False
+            ).first()
+            
+            if expired_code:
+                messages.error(request, "Code has expired. Please request a new one.")
+            else:
+                messages.error(request, "Invalid verification code. Please try again.")
+    
+    # Calculate time remaining
+    latest_code = TwoFactorCode.objects.filter(
+        user=user,
+        is_used=False
+    ).order_by('-created_at').first()
+    
+    time_remaining = None
+    if latest_code:
+        time_remaining = int((latest_code.expires_at - timezone.now()).total_seconds())
+    
+    return render(request, "auth/verify_2fa.html", {
+        "user_email": user.email,
+        "time_remaining": time_remaining
+    })
+
+
+def resend_2fa_code(request):
+    """Resend 2FA code"""
+    
+    pending_user_id = request.session.get('pending_2fa_user_id')
+    if not pending_user_id:
+        messages.error(request, "No pending verification.")
+        return redirect("login")
+    
+    from django.contrib.auth.models import User
+    user = User.objects.get(id=pending_user_id)
+    
+    # Invalidate old codes
+    TwoFactorCode.objects.filter(user=user, is_used=False).update(is_used=True)
+    
+    # Generate new code
+    code = TwoFactorCode.generate_code()
+    expires_at = timezone.now() + timedelta(minutes=5)
+    
+    TwoFactorCode.objects.create(
+        user=user,
+        code=code,
+        expires_at=expires_at,
+        ip_address=get_client_ip(request)
+    )
+    
+    # Send email
+    email_sent = send_2fa_code_email(user, code, get_client_ip(request))
+    
+    if email_sent:
+        messages.success(request, "New verification code sent!")
+    else:
+        messages.error(request, "Failed to send code. Please try again.")
+    
+    return redirect("verify_2fa")
+
+
+@login_required
+def toggle_2fa(request):
+    """Enable/disable 2FA for user"""
+    
+    profile, created = CitizenProfile.objects.get_or_create(user=request.user)
+    
+    if request.method == "POST":
+        action = request.POST.get("action")
+        
+        if action == "enable":
+            if not request.user.email:
+                messages.error(request, "Please add an email address to your profile before enabling 2FA.")
+                return redirect("profile")
+            
+            profile.two_factor_enabled = True
+            profile.save()
+            messages.success(request, "✅ Two-Factor Authentication enabled! You'll receive a code via email on next login.")
+        
+        elif action == "disable":
+            profile.two_factor_enabled = False
+            profile.save()
+            messages.success(request, "Two-Factor Authentication disabled.")
+        
+        return redirect("security_settings")
+    
+    return render(request, "auth/toggle_2fa.html", {
+        "two_factor_enabled": profile.two_factor_enabled
+    })
+
+
+@login_required
+def security_settings(request):
+    """Security settings page"""
+    
+    profile, created = CitizenProfile.objects.get_or_create(user=request.user)
+    
+    # Get recent 2FA activity
+    recent_codes = TwoFactorCode.objects.filter(
+        user=request.user
+    ).order_by('-created_at')[:10]
+    
+    return render(request, "auth/security_settings.html", {
+        "two_factor_enabled": profile.two_factor_enabled,
+        "recent_codes": recent_codes
+    })

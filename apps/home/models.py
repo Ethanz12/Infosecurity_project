@@ -4,6 +4,11 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from security.crypto import encrypt, decrypt 
 
+from django.utils import timezone
+from datetime import timedelta
+import random
+import string
+
 # --- CONFIGURATION: Singapore Departments (ABAC Attributes) ---
 DEPARTMENTS = [
     ('HEALTH', 'Health (MOH)'),
@@ -38,6 +43,8 @@ class CitizenProfile(models.Model):
     # 2. Dental Stuff: RESTRICTED
     # Logic in views.py ensures ONLY 'EthanLim' sees this.
     dental_stuff = models.TextField(blank=True, null=True)
+
+    two_factor_enabled = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -221,3 +228,23 @@ class StaffProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.username} | {self.get_department_display()} | Lvl {self.security_level}"
+    
+class TwoFactorCode(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    
+    def is_valid(self):
+        """Check if code is still valid"""
+        return not self.is_used and timezone.now() < self.expires_at
+    
+    @staticmethod
+    def generate_code():
+        """Generate random 6-digit code"""
+        return ''.join(random.choices(string.digits, k=6))
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.code} - {'Valid' if self.is_valid() else 'Invalid'}"
