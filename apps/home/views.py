@@ -568,14 +568,14 @@ def ticket_detail(request, ticket_id):
     is_owner = (ticket.citizen == user)
     has_access = False
 
-    # --- ACCESS CONTROL LOGIC ---
+    # access control stuff
     if is_owner:
         has_access = True
     elif is_gov:
         if user.is_superuser:
             has_access = True
         else:
-            # Check Dental Restriction
+            # my abac dental restriction
             if ticket.category == 'DENTAL':
                 has_access = (user.username == "EthanLim")
             else:
@@ -589,8 +589,8 @@ def ticket_detail(request, ticket_id):
 
     if not has_access:
         if is_gov and ticket.category == 'DENTAL':
-             return HttpResponseForbidden("Access Denied: Dental records are restricted to Specialist (EthanLim).")
-        return HttpResponseForbidden("Access Denied: Insufficient Department or Seniority clearance.")
+             return HttpResponseForbidden("Access Denied: Dental records are restricted to EthanLim.")
+        return HttpResponseForbidden("Access Denied: Not correct Department or Seniority clearance.")
 
     # --- HANDLING UPDATES (POST) ---
     if request.method == "POST" and is_gov:
@@ -628,7 +628,7 @@ def ticket_detail(request, ticket_id):
             if user.username == "EthanLim":
                 citizen_info["dental_stuff"] = profile.dental_stuff
             else:
-                citizen_info["dental_stuff"] = "RESTRICTED: AUTHORIZED PERSONNEL (EthanLim) ONLY"
+                citizen_info["dental_stuff"] = "Restricted: Ask EthanLim for access"
                 
             context["citizen_info"] = citizen_info
         except:
