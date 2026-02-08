@@ -4,7 +4,7 @@
 # -----------------------------
 set -e
 
-# 1️⃣ Check for Key
+# 1️⃣ Check for FIELD_ENCRYPTION_KEY
 if [ -z "$FIELD_ENCRYPTION_KEY" ]; then
   echo "ERROR: FIELD_ENCRYPTION_KEY is missing in .env!"
   exit 1
@@ -18,9 +18,21 @@ until mysqladmin ping -h "$MYSQL_HOST" --silent; do
 done
 echo "MySQL is up!"
 
+echo "--- Checking spaCy NLP model ---"
+python - <<'PYTHON'
+try:
+    import spacy
+    spacy.load("en_core_web_sm")
+    print("✅ spaCy model found")
+except Exception as e:
+    print(f"⚠️ spaCy model not available, NLP redaction disabled: {e}")
+PYTHON
+
 # 3️⃣ Migrations
 echo "Generating missing migration files..."
-python manage.py makemigrations
+# Ensure both apps get migrations
+python manage.py makemigrations home
+python manage.py makemigrations chat
 echo "Applying migrations..."
 python manage.py migrate --noinput
 
@@ -43,15 +55,13 @@ if not User.objects.filter(username=admin_user).exists():
     User.objects.create_superuser(username=admin_user, email='admin@example.com', password=admin_pass)
     print(f'✅ Superuser created: {admin_user}')
 
-# 3. Ensure Staff Accounts (The Critical Part)
+# 3. Ensure Staff Accounts
 try:
-    # We use get_model because it is safer than direct imports
     StaffProfile = apps.get_model('home', 'StaffProfile')
 except LookupError as e:
     print(f'❌ CRITICAL ERROR: Could not find StaffProfile model. Error: {e}')
     exit(1)
 
-# Config: (EnvUser, EnvPass, Department, Level)
 config = [
     ('HEALTH_USER', 'HEALTH_PASS', 'HEALTH', 2),
     ('FINANCE_USER', 'FINANCE_PASS', 'FINANCE', 2),
@@ -70,22 +80,58 @@ for u_var, p_var, dept, lvl in config:
         print(f'⚠️  Skipping {dept}: {u_var} or {p_var} missing in .env')
         continue
 
-    # Create/Update User
     user, created = User.objects.get_or_create(username=username)
-    user.set_password(password) # Force password sync
+    user.set_password(password)
     user.email = f'{username}@gov.sg'
     user.is_staff = True
     user.groups.add(gov_group)
     user.save()
 
-    # Create/Update Profile
     StaffProfile.objects.update_or_create(
         user=user,
         defaults={'department': dept, 'security_level': lvl}
     )
-    
+
     status = 'Created' if created else 'Updated'
     print(f'✅ {status}: {username} -> {dept} (Lvl {lvl})')
+
+# 5️⃣ Test Chat Models (Create → Verify → Cleanup)
+try:
+    Conversation = apps.get_model('chat', 'Conversation')
+    Message = apps.get_model('chat', 'Message')
+
+    print('--- Running chat model self-test ---')
+
+    # Create test users (marked clearly)
+    test_user1, _ = User.objects.get_or_create(username='__testuser1__')
+    test_user2, _ = User.objects.get_or_create(username='__testuser2__')
+
+    # Create conversation
+    conv = Conversation.objects.create()
+    conv.participants.add(test_user1, test_user2)
+    conv.save()
+
+    # Create test message
+    msg = Message(conversation=conv, sender=test_user1)
+    msg.set_content('Hello World')
+    msg.set_redacted_content('Hello [REDACTED]')
+    msg.save()
+
+    print('✅ Chat models test successful!')
+
+    # -------------------------
+    # CLEANUP (IMPORTANT PART)
+    # -------------------------
+    msg.delete()
+    conv.delete()
+    test_user1.delete()
+    test_user2.delete()
+
+    print('🧹 Chat test data cleaned up successfully.')
+
+except Exception as e:
+    print(f'❌ Chat models test failed: {e}')
+
 "
 
 echo "--- SETUP COMPLETE ---"
