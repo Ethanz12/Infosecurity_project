@@ -15,5 +15,10 @@ urlpatterns = [
     path('tickets/', views.ticket_list, name='ticket_list'),
     path('tickets/create/', views.create_ticket, name='create_ticket'),
     path('tickets/<int:ticket_id>/', views.ticket_detail, name='ticket_detail'),
+
+    path('verify-2fa/', views.verify_2fa, name='verify_2fa'),
+    path('resend-2fa/', views.resend_2fa_code, name='resend_2fa'),
+    path('security/settings/', views.security_settings, name='security_settings'),
+    path('security/toggle-2fa/', views.toggle_2fa, name='toggle_2fa'),
 ]
 

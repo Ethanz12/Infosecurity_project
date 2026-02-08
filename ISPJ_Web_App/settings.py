@@ -163,3 +163,18 @@ AWS_S3_OBJECT_PARAMETERS = {
 
 AWS_DEFAULT_ACL = None  # Don't make files public by default
 AWS_S3_FILE_OVERWRITE = False  # Don't overwrite files with same name
+
+# ============================================================
+# EMAIL CONFIGURATION FOR 2FA (MAILTRAP)
+# ============================================================
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'sandbox.smtp.mailtrap.io'
+EMAIL_PORT = 2525
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = 'noreply@securegov.sg'
+
+# 2FA Settings
+TWO_FACTOR_CODE_EXPIRY_MINUTES = 5
