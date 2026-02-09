@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, include  # include added
 from . import views
 
 urlpatterns = [
@@ -20,5 +20,9 @@ urlpatterns = [
     path('resend-2fa/', views.resend_2fa_code, name='resend_2fa'),
     path('security/settings/', views.security_settings, name='security_settings'),
     path('security/toggle-2fa/', views.toggle_2fa, name='toggle_2fa'),
-]
 
+    # ----------------------------
+    # Chat integration
+    # ----------------------------
+    path('chat/', include('apps.chat.urls')),  # includes chat app URLs
+]
