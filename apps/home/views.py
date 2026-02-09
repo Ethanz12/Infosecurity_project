@@ -12,7 +12,7 @@ import logging
 import os
 from django.shortcuts import get_object_or_404
 from .models import Ticket
-
+from .models import TicketLog
 from .models import CitizenProfile
 
 from django.utils import timezone
@@ -611,40 +611,101 @@ def ticket_detail(request, ticket_id):
     ticket = get_object_or_404(Ticket, id=ticket_id)
     user = request.user
     
+    # --- A. Determine Role ---
     is_gov = user.groups.filter(name="GovernmentWorker").exists() or user.is_staff
     is_owner = (ticket.citizen == user)
+    
     has_access = False
+    can_edit = False  # <--- Default to False (Read-Only)
 
-    # access control stuff
+    # --- B. Check Access Rights ---
     if is_owner:
         has_access = True
+        can_edit = False # Citizens cannot edit gov fields
     elif is_gov:
         if user.is_superuser:
             has_access = True
+            can_edit = True
         else:
-            # my abac dental restriction
-            if ticket.category == 'DENTAL':
-                has_access = (user.username == "EthanLim")
-            else:
-                # Check Standard Access
-                try:
-                    staff = StaffProfile.objects.get(user=user)
+            try:
+                staff = StaffProfile.objects.get(user=user)
+                
+                # ===================================================
+                # 🦷 DENTAL TICKET LOGIC
+                # ===================================================
+                if ticket.category == 'DENTAL':
+                    # Rule 1: EthanLim has FULL access (View + Edit)
+                    if user.username == "EthanLim":
+                        has_access = True
+                        can_edit = True
+                    
+                    # Rule 2: Senior Health Staff (Level 2+) can VIEW ONLY
+                    # (Assuming 'HEALTH' is your department code)
+                    elif staff.department == 'HEALTH' and staff.security_level >= 2:
+                        has_access = True
+                        can_edit = False  # <--- READ ONLY MODE
+                        
+                    # Rule 3: Everyone else (Juniors/Other Depts) -> BLOCKED
+                    else:
+                        has_access = False
+                
+                # ===================================================
+                # 📂 STANDARD TICKET LOGIC
+                # ===================================================
+                else:
                     if staff.department == ticket.department and staff.security_level >= ticket.min_clearance:
                         has_access = True
-                except StaffProfile.DoesNotExist:
-                    has_access = False
+                        can_edit = True
+                    else:
+                        has_access = False
 
+            except StaffProfile.DoesNotExist:
+                has_access = False
+
+    # --- C. 🛑 HANDLE ACCESS DENIED ---
     if not has_access:
-        if is_gov and ticket.category == 'DENTAL':
-             return HttpResponseForbidden("Access Denied: Dental records are restricted to EthanLim.")
-        return HttpResponseForbidden("Access Denied: Not correct Department or Seniority clearance.")
+        TicketLog.objects.create(
+            ticket=ticket,
+            user=user,
+            action="UNAUTHORIZED_ACCESS",
+            details=f"User {user.username} blocked from viewing."
+        )
+        return render(request, 'home/noaccess.html', status=403)
 
-    # --- HANDLING UPDATES (POST) ---
+    # --- D. ✅ HANDLE ACCESS GRANTED (Log View) ---
+    if is_gov:
+        TicketLog.objects.create(
+            ticket=ticket,
+            user=user,
+            action="VIEW",
+            details=f"Staff {user.username} viewed ticket."
+        )
+
+    # --- E. Handle Updates (POST Request) ---
     if request.method == "POST" and is_gov:
+        # SECURITY CHECK: Ensure user has Edit rights before processing
+        if not can_edit:
+            messages.error(request, "⚠️ Permission Denied: You are in Read-Only mode for this ticket.")
+            return redirect("ticket_detail", ticket_id=ticket.id)
+
         new_status = request.POST.get("status")
         response = request.POST.get("gov_response")
         new_sensitivity = request.POST.get("sensitivity")
         
+        # Log the update details
+        changes = []
+        if new_status and new_status != ticket.status: changes.append(f"Status: {new_status}")
+        if new_sensitivity: changes.append(f"Clearance: {new_sensitivity}")
+        if response: changes.append("Added Response")
+
+        TicketLog.objects.create(
+            ticket=ticket,
+            user=user,
+            action="UPDATE",
+            details=", ".join(changes)
+        )
+
+        # Apply changes
         if new_status: ticket.status = new_status
         if response:
             ticket.gov_response = response
@@ -655,11 +716,13 @@ def ticket_detail(request, ticket_id):
         messages.success(request, "Ticket updated.")
         return redirect("ticket_detail", ticket_id=ticket.id)
 
-    # --- PREPARE DATA ---
+    # --- F. Prepare Data for Template ---
     context = {
         "ticket": ticket,
         "is_gov": is_gov,
-        "sensitivity_levels": Ticket.TICKET_SENSITIVITY 
+        "can_edit": can_edit, # <--- Pass this to template to hide/show buttons
+        "sensitivity_levels": Ticket.TICKET_SENSITIVITY,
+        "logs": ticket.logs.all().order_by('-timestamp')
     }
 
     if is_gov:
@@ -671,17 +734,33 @@ def ticket_detail(request, ticket_id):
                 "phone": mask_phone(profile.get_phone()),
                 "blood_type": profile.blood_type,
             }
-            # Restrict Dental Info in View
+            
+            # Privacy Filter: Only EthanLim sees raw Dental data
             if user.username == "EthanLim":
                 citizen_info["dental_stuff"] = profile.dental_stuff
+            elif staff.department == 'HEALTH' and staff.security_level >= 2:
+                 citizen_info["dental_stuff"] = profile.dental_stuff # Senior Health can see it
             else:
-                citizen_info["dental_stuff"] = "Restricted: Ask EthanLim for access"
+                citizen_info["dental_stuff"] = "Restricted"
                 
             context["citizen_info"] = citizen_info
         except:
             context["citizen_info"] = None
 
     return render(request, "tickets/ticket_detail.html", context)
+
+@login_required
+def view_logs(request):
+    is_gov = request.user.groups.filter(name="GovernmentWorker").exists() or request.user.is_staff
+    
+    if not is_gov:
+        # Citizens shouldn't see system logs -> Show Access Denied
+        return render(request, 'home/noaccess.html', status=403)
+
+    # Get all logs, newest first
+    logs = TicketLog.objects.all().order_by('-timestamp')
+    
+    return render(request, "tickets/logs.html", {"logs": logs})
 
 
 
