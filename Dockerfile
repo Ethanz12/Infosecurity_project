@@ -23,6 +23,8 @@ RUN apt-get update && apt-get install -y \
     libtesseract-dev \
     poppler-utils \
     dos2unix \
+    clamav \
+    clamav-daemon \
     && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------
@@ -61,6 +63,22 @@ COPY . .
 # Since we run 'makemigrations' inside the container as 'appuser',
 # 'appuser' needs write permission to the /app folder to create the files.
 RUN chown -R appuser:appuser /app
+
+# -----------------------------
+# ClamAV SETUP
+# -----------------------------
+RUN mkdir -p /var/log/clamav /var/lib/clamav /var/run/clamav && \
+    chown -R appuser:appuser /var/log/clamav /var/lib/clamav /var/run/clamav && \
+    chmod -R 777 /var/log/clamav /var/lib/clamav /var/run/clamav && \
+    echo "LocalSocket /var/run/clamav/clamd.sock" > /etc/clamav/clamd.conf && \
+    echo "LocalSocketGroup appuser" >> /etc/clamav/clamd.conf && \
+    echo "LocalSocketMode 666" >> /etc/clamav/clamd.conf && \
+    echo "FixStaleSocket yes" >> /etc/clamav/clamd.conf && \
+    echo "TCPSocket 3310" >> /etc/clamav/clamd.conf && \
+    echo "TCPAddr 127.0.0.1" >> /etc/clamav/clamd.conf && \
+    echo "PidFile /var/run/clamav/clamd.pid" >> /etc/clamav/clamd.conf && \
+    echo "DatabaseDirectory /var/lib/clamav" >> /etc/clamav/clamd.conf && \
+    freshclam --stdout || echo "Virus database will update on first run"
 
 # -----------------------------
 # Setup Entrypoint Script
