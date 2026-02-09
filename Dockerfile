@@ -48,6 +48,10 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install --upgrade pip && \
     python -m pip install --no-cache-dir -r requirements.txt
 
+# Install spaCy + English model
+RUN pip install spacy && \
+    python -m spacy download en_core_web_sm
+
 # -----------------------------
 # Copy source code
 # -----------------------------

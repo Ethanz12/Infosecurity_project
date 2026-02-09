@@ -36,14 +36,9 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "apps.home",
-
-    # Future internal apps (you will add these)
-    # "encryption",          # AES-256 field-level encryption
-    # "classification",      # AI-based data classification
-    # "messaging",           # Secure E2EE chat + file transfer
-    # "dlp",                 # Data loss prevention + redaction
-    # "audit",               # Compliance logging
+    "apps.chat",  # <--- add this
 ]
+
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
