@@ -116,15 +116,6 @@ class UploadedFile(models.Model):
     classification_patterns = models.TextField(blank=True, null=True)  # Matched patterns as JSON
     classified_at = models.DateTimeField(blank=True, null=True)  # When it was classified
 
-    malware_scan_status = models.CharField(max_length=20, default='PENDING', choices=[
-    ('PENDING', 'Pending'),
-    ('CLEAN', 'Clean'),
-    ('INFECTED', 'Infected'),
-    ('ERROR', 'Scan Error')
-    ])
-    malware_scan_date = models.DateTimeField(blank=True, null=True)
-    virus_name = models.CharField(max_length=255, blank=True, null=True)
-
     def __str__(self):
             return f"{self.file_name} - {self.user.username} [{self.classification}]"
     
@@ -257,3 +248,13 @@ class TwoFactorCode(models.Model):
     
     def __str__(self):
         return f"{self.user.username} - {self.code} - {'Valid' if self.is_valid() else 'Invalid'}"
+    
+class TicketLog(models.Model):
+    ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name='logs')
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    action = models.CharField(max_length=50)  # e.g., "VIEW", "UPDATE"
+    details = models.TextField(blank=True)    # e.g., "Changed status to Resolved"
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user} {self.action} {self.ticket}"

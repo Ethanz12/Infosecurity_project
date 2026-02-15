@@ -1,0 +1,43 @@
+{% extends 'home/base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>System Access Logs</h2>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>User</th>
+                <th>Ticket ID</th>
+                <th>Action</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in logs %}
+            <tr>
+                <td>{{ log.timestamp|date:"Y-m-d H:i:s" }}</td>
+                <td>{{ log.user.username }}</td>
+                <td>
+                    <a href="{% url 'ticket_detail' log.ticket.id %}">#{{ log.ticket.id }}</a>
+                </td>
+                <td>
+                    {% if log.action == "UNAUTHORIZED_ACCESS" %}
+                        <span class="badge bg-danger">{{ log.action }}</span>
+                    {% elif log.action == "UPDATE" %}
+                        <span class="badge bg-primary">{{ log.action }}</span>
+                    {% else %}
+                        <span class="badge bg-secondary">{{ log.action }}</span>
+                    {% endif %}
+                </td>
+                <td>{{ log.details }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5">No logs found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -63,10 +63,11 @@ except LookupError as e:
     exit(1)
 
 config = [
-    ('HEALTH_USER', 'HEALTH_PASS', 'HEALTH', 2),
+    ('HEALTH_USER', 'HEALTH_PASS', 'HEALTH', 1),
     ('FINANCE_USER', 'FINANCE_PASS', 'FINANCE', 2),
     ('GENERAL_USER', 'GENERAL_PASS', 'GENERAL', 1),
     ('HEALTH_USER1', 'HEALTH_PASS1', 'HEALTH', 2),
+    ('HEALTH_USER2', 'HEALTH_PASS2', 'HEALTH', 2)
 ]
 
 gov_group = Group.objects.get(name='GovernmentWorker')
@@ -135,18 +136,5 @@ except Exception as e:
 "
 
 echo "--- SETUP COMPLETE ---"
-
-# 🆕 START CLAMAV DAEMON
-echo "--- STARTING CLAMAV ---"
-echo "Starting ClamAV daemon..."
-
-# Start clamd as background process
-/usr/sbin/clamd &
-
-# Give it time to start
-sleep 3
-
-echo "--- CLAMAV READY ---"
-
 echo "Starting Server..."
 exec "$@"
