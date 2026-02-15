@@ -136,18 +136,5 @@ except Exception as e:
 "
 
 echo "--- SETUP COMPLETE ---"
-
-# 🆕 START CLAMAV DAEMON
-echo "--- STARTING CLAMAV ---"
-echo "Starting ClamAV daemon..."
-
-# Start clamd as background process
-/usr/sbin/clamd &
-
-# Give it time to start
-sleep 3
-
-echo "--- CLAMAV READY ---"
-
 echo "Starting Server..."
 exec "$@"

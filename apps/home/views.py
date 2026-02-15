@@ -20,8 +20,6 @@ from datetime import timedelta
 from .models import TwoFactorCode, CitizenProfile
 from .email_utils import send_2fa_code_email
 
-from .malware_scanner import MalwareScanner
-
 #S3 Stuff
 import boto3
 from botocore.exceptions import ClientError
@@ -367,43 +365,13 @@ def upload_file(request):
     if request.method == 'POST' and request.FILES.get('file'):
         uploaded_file = request.FILES['file']
 
-        # Generate unique filename
+        # Generate unique filename to prevent conflicts
         file_extension = uploaded_file.name.split('.')[-1]
         unique_filename = f"{uuid.uuid4()}.{file_extension}"
         s3_key = f"uploads/{request.user.username}/{unique_filename}"
 
         try:
-            # Read file content
-            file_content = uploaded_file.read()
-
-            # 🆕 STEP 1: MALWARE SCAN
-            is_safe, scan_result = MalwareScanner.scan_file(file_content)
-            
-            if not is_safe:
-                # Malware detected - BLOCK upload
-                messages.error(
-                    request, 
-                    f"🦠 Upload blocked! Malware detected: {scan_result}"
-                )
-                logger.warning(f"Blocked malware upload: {uploaded_file.name} - {scan_result}")
-                return redirect('upload_file')
-            
-            # Log scan result
-            logger.info(f"Malware scan result for {uploaded_file.name}: {scan_result}")
-
-            # STEP 2: CLASSIFICATION (existing)
-            from .classification import OCRClassifier
-
-            classification, confidence, matched_patterns = OCRClassifier.classify_with_ocr(
-                file_content,
-                uploaded_file.name,
-                uploaded_file.content_type
-            )
-
-            # Reset file pointer for S3 upload
-            uploaded_file.seek(0)
-
-            # STEP 3: UPLOAD TO S3 (existing)
+            # Upload to S3
             s3_client = boto3.client(
                 's3',
                 aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
@@ -418,41 +386,31 @@ def upload_file(request):
                 ExtraArgs={'ContentType': uploaded_file.content_type}
             )
 
-            # STEP 4: SAVE TO DATABASE (with both classification AND scan result)
+            # Save to database
             file_record = UploadedFile.objects.create(
                 user=request.user,
                 file_name=uploaded_file.name,
                 file_size=uploaded_file.size,
                 s3_key=s3_key,
-                file_type=uploaded_file.content_type,
-                classification=classification,
-                classification_confidence=confidence,
-                classification_patterns=json.dumps(matched_patterns[:5]),
-                classified_at=timezone.now(),
-                # 🆕 Malware scan fields
-                malware_scan_status='CLEAN' if is_safe else 'INFECTED',
-                malware_scan_date=timezone.now(),
-                virus_name=scan_result if not is_safe else None
+                file_type=uploaded_file.content_type
             )
 
-            messages.success(
-                request, 
-                f"✅ File '{uploaded_file.name}' uploaded successfully! Classification: {classification}, Malware Scan: {scan_result}"
-            )
+            messages.success(request, f"File '{uploaded_file.name}' uploaded successfully!")
 
             return redirect('file_list')
-
+        
         except ClientError as e:
             logger.error(f"S3 upload error: {e}")
             messages.error(request, "Failed to upload file to cloud storage.")
             return redirect('upload_file')
-
+        
         except Exception as e:
             logger.error(f"Upload error: {e}")
-            messages.error(request, f"An error occurred: {str(e)}")
+            messages.error(request, "An error occurred during upload.")
             return redirect('upload_file')
-
     return render(request, 'home/upload.html')
+
+@login_required
 
 def file_list(request):
     files = UploadedFile.objects.filter(user=request.user)
@@ -495,7 +453,82 @@ def download_file(request, file_id):
 
 @login_required
 
+def upload_file(request):
+    if request.method == 'POST' and request.FILES.get('file'):
+        uploaded_file = request.FILES['file']
 
+        # Generate unique filename
+        file_extension = uploaded_file.name.split('.')[-1]
+        unique_filename = f"{uuid.uuid4()}.{file_extension}"
+        s3_key = f"uploads/{request.user.username}/{unique_filename}"
+
+        try:
+            # Read file content for classification
+
+            file_content = uploaded_file.read()
+
+            # Import OCRClassifier
+            from .classification import OCRClassifier
+
+            # Classify using OCR-enabled classifier
+
+            classification, confidence, matched_patterns = OCRClassifier.classify_with_ocr(
+                file_content,
+                uploaded_file.name,
+                uploaded_file.content_type
+            )
+
+            # Reset file pointer for S3 upload
+            uploaded_file.seek(0)
+
+            # Upload to S3
+
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+                region_name=settings.AWS_S3_REGION_NAME
+
+            )
+
+            s3_client.upload_fileobj(
+                uploaded_file,
+                settings.AWS_STORAGE_BUCKET_NAME,
+                s3_key,
+                ExtraArgs={'ContentType': uploaded_file.content_type}
+            )
+
+            # Save to database with classification
+            file_record = UploadedFile.objects.create(
+                user=request.user,
+                file_name=uploaded_file.name,
+                file_size=uploaded_file.size,
+                s3_key=s3_key,
+                file_type=uploaded_file.content_type,
+                classification=classification,
+                classification_confidence=confidence,
+                classification_patterns=json.dumps(matched_patterns[:5]),
+                classified_at=timezone.now()
+            )
+
+            messages.success(
+                request, 
+                f"File '{uploaded_file.name}' uploaded and classified as: {classification} (confidence: {confidence})"
+            )
+
+            return redirect('file_list')
+
+        except ClientError as e:
+            logger.error(f"S3 upload error: {e}")
+            messages.error(request, "Failed to upload file to cloud storage.")
+            return redirect('upload_file')
+
+        except Exception as e:
+            logger.error(f"Upload error: {e}")
+            messages.error(request, f"An error occurred: {str(e)}")
+            return redirect('upload_file')
+
+    return render(request, 'home/upload.html')
 #my ticket
 @login_required
 def create_ticket(request):
