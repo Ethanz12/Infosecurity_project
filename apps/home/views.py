@@ -377,7 +377,16 @@ def upload_file(request):
             # STEP 2: MALWARE SCAN (NEW)
             from .malware_scanner import MalwareScanner
             
+            logger.info("=" * 50)
+            logger.info("ABOUT TO CALL MALWARE SCANNER")
+            logger.info(f"File size to scan: {len(file_content)} bytes")
+            logger.info("=" * 50)
+
             is_safe, scan_result = MalwareScanner.scan_file(file_content)
+            
+            logger.info("=" * 50)
+            logger.info(f"SCANNER RETURNED: is_safe={is_safe}, result={scan_result}")
+            logger.info("=" * 50)
             
             if not is_safe:
                 # Malware detected - block upload

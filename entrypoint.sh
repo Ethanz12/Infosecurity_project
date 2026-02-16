@@ -13,22 +13,24 @@ fi
 # 2️⃣ Start ClamAV daemon
 echo "Starting ClamAV daemon..."
 /usr/sbin/clamd &
-sleep 3
+echo "Waiting for ClamAV to initialize..."
+sleep 10
 
 # Test ClamAV connection
 echo "Testing ClamAV connection..."
-python - <<'PYTHON'
-try:
-    import pyclamd
-    cd = pyclamd.ClamdNetworkSocket(host='127.0.0.1', port=3310)
-    if cd.ping():
-        print("✅ ClamAV daemon is running")
-        print(f"Version: {cd.version()}")
-    else:
-        print("⚠️ ClamAV daemon not responding")
-except Exception as e:
-    print(f"❌ ClamAV connection error: {e}")
-PYTHON
+for i in {1..30}; do
+    if python -c "import pyclamd; cd = pyclamd.ClamdNetworkSocket(host='127.0.0.1', port=3310); cd.ping()" 2>/dev/null; then
+        echo "✅ ClamAV daemon is running"
+        python -c "import pyclamd; cd = pyclamd.ClamdNetworkSocket(host='127.0.0.1', port=3310); print(f'Version: {cd.version()}')"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        echo "⚠️ ClamAV not responding after 30 attempts - continuing anyway"
+    else
+        echo "Waiting for ClamAV... (attempt $i/30)"
+        sleep 2
+    fi
+done
 
 # 3️⃣ Wait for MySQL
 echo "Waiting for MySQL..."
