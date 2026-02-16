@@ -365,13 +365,39 @@ def upload_file(request):
     if request.method == 'POST' and request.FILES.get('file'):
         uploaded_file = request.FILES['file']
 
-        # Generate unique filename to prevent conflicts
+        # Generate unique filename
         file_extension = uploaded_file.name.split('.')[-1]
         unique_filename = f"{uuid.uuid4()}.{file_extension}"
         s3_key = f"uploads/{request.user.username}/{unique_filename}"
 
         try:
-            # Upload to S3
+            # STEP 1: Read file content for scanning and classification
+            file_content = uploaded_file.read()
+
+            # STEP 2: MALWARE SCAN (NEW)
+            from .malware_scanner import MalwareScanner
+            
+            is_safe, scan_result = MalwareScanner.scan_file(file_content)
+            
+            if not is_safe:
+                # Malware detected - block upload
+                messages.error(request, f"🦠 Upload blocked! Malware detected: {scan_result}")
+                logger.warning(f"Malware detected in upload by {request.user.username}: {scan_result}")
+                return redirect('upload_file')
+            
+            # STEP 3: File Classification (OCR)
+            from .classification import OCRClassifier
+
+            classification, confidence, matched_patterns = OCRClassifier.classify_with_ocr(
+                file_content,
+                uploaded_file.name,
+                uploaded_file.content_type
+            )
+
+            # Reset file pointer for S3 upload
+            uploaded_file.seek(0)
+
+            # STEP 4: Upload to S3
             s3_client = boto3.client(
                 's3',
                 aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
@@ -386,28 +412,43 @@ def upload_file(request):
                 ExtraArgs={'ContentType': uploaded_file.content_type}
             )
 
-            # Save to database
+            # STEP 5: Save to database with both classification AND malware status
             file_record = UploadedFile.objects.create(
                 user=request.user,
                 file_name=uploaded_file.name,
                 file_size=uploaded_file.size,
                 s3_key=s3_key,
-                file_type=uploaded_file.content_type
+                file_type=uploaded_file.content_type,
+                # Classification fields
+                classification=classification,
+                classification_confidence=confidence,
+                classification_patterns=json.dumps(matched_patterns[:5]),
+                classified_at=timezone.now(),
+                # Malware fields
+                malware_scan_status='CLEAN' if is_safe else 'INFECTED',
+                malware_scan_date=timezone.now(),
+                virus_name=scan_result if not is_safe else None
             )
 
-            messages.success(request, f"File '{uploaded_file.name}' uploaded successfully!")
+            messages.success(
+                request, 
+                f"✅ File '{uploaded_file.name}' uploaded successfully!\n"
+                f"Classification: {classification} (confidence: {confidence})\n"
+                f"Malware Scan: {scan_result}"
+            )
 
             return redirect('file_list')
-        
+
         except ClientError as e:
             logger.error(f"S3 upload error: {e}")
             messages.error(request, "Failed to upload file to cloud storage.")
             return redirect('upload_file')
-        
+
         except Exception as e:
             logger.error(f"Upload error: {e}")
-            messages.error(request, "An error occurred during upload.")
+            messages.error(request, f"An error occurred: {str(e)}")
             return redirect('upload_file')
+
     return render(request, 'home/upload.html')
 
 @login_required
