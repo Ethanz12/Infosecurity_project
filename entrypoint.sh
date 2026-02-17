@@ -1,6 +1,6 @@
 #!/bin/bash
 # -----------------------------
-# entrypoint.sh
+# entrypoint.sh with ClamAV
 # -----------------------------
 set -e
 
@@ -10,7 +10,29 @@ if [ -z "$FIELD_ENCRYPTION_KEY" ]; then
   exit 1
 fi
 
-# 2️⃣ Wait for MySQL
+# 2️⃣ Start ClamAV daemon
+echo "Starting ClamAV daemon..."
+/usr/sbin/clamd &
+echo "Waiting for ClamAV to initialize..."
+sleep 10
+
+# Test ClamAV connection
+echo "Testing ClamAV connection..."
+for i in {1..30}; do
+    if python -c "import pyclamd; cd = pyclamd.ClamdNetworkSocket(host='127.0.0.1', port=3310); cd.ping()" 2>/dev/null; then
+        echo "✅ ClamAV daemon is running"
+        python -c "import pyclamd; cd = pyclamd.ClamdNetworkSocket(host='127.0.0.1', port=3310); print(f'Version: {cd.version()}')"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        echo "⚠️ ClamAV not responding after 30 attempts - continuing anyway"
+    else
+        echo "Waiting for ClamAV... (attempt $i/30)"
+        sleep 2
+    fi
+done
+
+# 3️⃣ Wait for MySQL
 echo "Waiting for MySQL..."
 until mysqladmin ping -h "$MYSQL_HOST" --silent; do
   echo "MySQL is unavailable - sleeping..."
@@ -28,15 +50,14 @@ except Exception as e:
     print(f"⚠️ spaCy model not available, NLP redaction disabled: {e}")
 PYTHON
 
-# 3️⃣ Migrations
+# 4️⃣ Migrations
 echo "Generating missing migration files..."
-# Ensure both apps get migrations
 python manage.py makemigrations home
 python manage.py makemigrations chat
 echo "Applying migrations..."
 python manage.py migrate --noinput
 
-# 4️⃣ Auto-Setup: Roles, Admin, and Staff
+# 5️⃣ Auto-Setup: Roles, Admin, and Staff
 echo "--- STARTING AUTO-SETUP ---"
 python manage.py shell -c "
 import os
@@ -96,23 +117,20 @@ for u_var, p_var, dept, lvl in config:
     status = 'Created' if created else 'Updated'
     print(f'✅ {status}: {username} -> {dept} (Lvl {lvl})')
 
-# 5️⃣ Test Chat Models (Create → Verify → Cleanup)
+# 6️⃣ Test Chat Models (Create → Verify → Cleanup)
 try:
     Conversation = apps.get_model('chat', 'Conversation')
     Message = apps.get_model('chat', 'Message')
 
     print('--- Running chat model self-test ---')
 
-    # Create test users (marked clearly)
     test_user1, _ = User.objects.get_or_create(username='__testuser1__')
     test_user2, _ = User.objects.get_or_create(username='__testuser2__')
 
-    # Create conversation
     conv = Conversation.objects.create()
     conv.participants.add(test_user1, test_user2)
     conv.save()
 
-    # Create test message
     msg = Message(conversation=conv, sender=test_user1)
     msg.set_content('Hello World')
     msg.set_redacted_content('Hello [REDACTED]')
@@ -120,9 +138,6 @@ try:
 
     print('✅ Chat models test successful!')
 
-    # -------------------------
-    # CLEANUP (IMPORTANT PART)
-    # -------------------------
     msg.delete()
     conv.delete()
     test_user1.delete()

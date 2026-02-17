@@ -97,6 +97,13 @@ class UploadedFile(models.Model):
         ('SENSITIVE', 'Sensitive'),
         ('CONFIDENTIAL', 'Confidential'),
     ]
+
+    MALWARE_STATUS_CHOICES = [
+        ('PENDING', 'Pending Scan'),
+        ('CLEAN', 'Clean'),
+        ('INFECTED', 'Infected'),
+        ('ERROR', 'Scan Error'),
+    ]
         
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     file_name = models.CharField(max_length=255)
@@ -116,6 +123,11 @@ class UploadedFile(models.Model):
     classification_patterns = models.TextField(blank=True, null=True)  # Matched patterns as JSON
     classified_at = models.DateTimeField(blank=True, null=True)  # When it was classified
 
+    # Malware scanning fields
+    malware_scan_status = models.CharField(max_length=20, choices=MALWARE_STATUS_CHOICES, default='PENDING')
+    malware_scan_date = models.DateTimeField(blank=True, null=True)
+    virus_name = models.CharField(max_length=200, blank=True, null=True)
+    
     def __str__(self):
             return f"{self.file_name} - {self.user.username} [{self.classification}]"
     
