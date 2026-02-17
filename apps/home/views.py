@@ -441,8 +441,11 @@ def ticket_list(request):
     return render(request, "tickets/ticket_list.html", {"tickets": tickets, "is_gov": is_gov})
 
 @login_required
-def ticket_detail(request, ticket_id):
-    ticket = get_object_or_404(Ticket, id=ticket_id)
+def ticket_detail(request, ticket_uuid): # Changed from ticket_id to ticket_uuid
+    # 1. Fetch by UUID (Unguessable ID)
+    # This prevents 'IDOR Injection' by stopping ID enumeration attacks.
+    ticket = get_object_or_404(Ticket, id=ticket_uuid)
+    
     user = request.user
     
     # --- A. Determine Role ---
@@ -450,12 +453,13 @@ def ticket_detail(request, ticket_id):
     is_owner = (ticket.citizen == user)
     
     has_access = False
-    can_edit = False  # <--- Default to False (Read-Only)
+    can_edit = False 
 
     # --- B. Check Access Rights ---
     if is_owner:
         has_access = True
         can_edit = False # Citizens cannot edit gov fields
+        
     elif is_gov:
         if user.is_superuser:
             has_access = True
@@ -468,18 +472,17 @@ def ticket_detail(request, ticket_id):
                 # 🦷 DENTAL TICKET LOGIC
                 # ===================================================
                 if ticket.category == 'DENTAL':
-                    # Rule 1: EthanLim has FULL access (View + Edit)
+                    # Rule 1: EthanLim has FULL access
                     if user.username == "EthanLim":
                         has_access = True
                         can_edit = True
                     
                     # Rule 2: Senior Health Staff (Level 2+) can VIEW ONLY
-                    # (Assuming 'HEALTH' is your department code)
                     elif staff.department == 'HEALTH' and staff.security_level >= 2:
                         has_access = True
-                        can_edit = False  # <--- READ ONLY MODE
+                        can_edit = False 
                         
-                    # Rule 3: Everyone else (Juniors/Other Depts) -> BLOCKED
+                    # Rule 3: Everyone else BLOCKED
                     else:
                         has_access = False
                 
@@ -487,6 +490,7 @@ def ticket_detail(request, ticket_id):
                 # 📂 STANDARD TICKET LOGIC
                 # ===================================================
                 else:
+                    # Strict Department & Clearance Check
                     if staff.department == ticket.department and staff.security_level >= ticket.min_clearance:
                         has_access = True
                         can_edit = True
@@ -498,15 +502,18 @@ def ticket_detail(request, ticket_id):
 
     # --- C. 🛑 HANDLE ACCESS DENIED ---
     if not has_access:
+        # SECURITY TIP: Log the attempted IDOR
         TicketLog.objects.create(
             ticket=ticket,
             user=user,
             action="UNAUTHORIZED_ACCESS",
-            details=f"User {user.username} blocked from viewing."
+            details=f"IDOR Attempt: User {user.username} tried to access ticket {ticket.id}"
         )
+        # Use 404 instead of 403 to hide existence of the ticket from attackers
+        # or stick to 403 if you want to be explicit about permission denied.
         return render(request, 'home/noaccess.html', status=403)
 
-    # --- D. ✅ HANDLE ACCESS GRANTED (Log View) ---
+    # --- D. ✅ HANDLE ACCESS GRANTED ---
     if is_gov:
         TicketLog.objects.create(
             ticket=ticket,
@@ -517,16 +524,14 @@ def ticket_detail(request, ticket_id):
 
     # --- E. Handle Updates (POST Request) ---
     if request.method == "POST" and is_gov:
-        # SECURITY CHECK: Ensure user has Edit rights before processing
         if not can_edit:
-            messages.error(request, "⚠️ Permission Denied: You are in Read-Only mode for this ticket.")
-            return redirect("ticket_detail", ticket_id=ticket.id)
+            messages.error(request, "⚠️ Permission Denied: Read-Only mode.")
+            return redirect("ticket_detail", ticket_uuid=ticket.id)
 
         new_status = request.POST.get("status")
         response = request.POST.get("gov_response")
         new_sensitivity = request.POST.get("sensitivity")
         
-        # Log the update details
         changes = []
         if new_status and new_status != ticket.status: changes.append(f"Status: {new_status}")
         if new_sensitivity: changes.append(f"Clearance: {new_sensitivity}")
@@ -539,7 +544,6 @@ def ticket_detail(request, ticket_id):
             details=", ".join(changes)
         )
 
-        # Apply changes
         if new_status: ticket.status = new_status
         if response:
             ticket.gov_response = response
@@ -548,19 +552,20 @@ def ticket_detail(request, ticket_id):
         
         ticket.save()
         messages.success(request, "Ticket updated.")
-        return redirect("ticket_detail", ticket_id=ticket.id)
+        return redirect("ticket_detail", ticket_uuid=ticket.id)
 
-    # --- F. Prepare Data for Template ---
+    # --- F. Prepare Data ---
     context = {
         "ticket": ticket,
         "is_gov": is_gov,
-        "can_edit": can_edit, # <--- Pass this to template to hide/show buttons
+        "can_edit": can_edit,
         "sensitivity_levels": Ticket.TICKET_SENSITIVITY,
         "logs": ticket.logs.all().order_by('-timestamp')
     }
 
+    # ... (Your existing context building logic for profile) ...
     if is_gov:
-        try:
+         try:
             profile = ticket.citizen.citizenprofile
             citizen_info = {
                 "username": ticket.citizen.username,
@@ -568,17 +573,14 @@ def ticket_detail(request, ticket_id):
                 "phone": mask_phone(profile.get_phone()),
                 "blood_type": profile.blood_type,
             }
-            
-            # Privacy Filter: Only EthanLim sees raw Dental data
             if user.username == "EthanLim":
                 citizen_info["dental_stuff"] = profile.dental_stuff
             elif staff.department == 'HEALTH' and staff.security_level >= 2:
-                 citizen_info["dental_stuff"] = profile.dental_stuff # Senior Health can see it
+                 citizen_info["dental_stuff"] = profile.dental_stuff
             else:
                 citizen_info["dental_stuff"] = "Restricted"
-                
             context["citizen_info"] = citizen_info
-        except:
+         except:
             context["citizen_info"] = None
 
     return render(request, "tickets/ticket_detail.html", context)
@@ -596,7 +598,7 @@ def view_logs(request):
     
     return render(request, "tickets/logs.html", {"logs": logs})
 
-
+#calean
 
 def verify_2fa(request):
     """Verify 2FA code"""
