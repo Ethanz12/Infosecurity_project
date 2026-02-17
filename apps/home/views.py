@@ -506,7 +506,6 @@ def upload_file(request):
             messages.error(request, f"An error occurred: {str(e)}")
             return redirect('upload_file')
 
-    return render(request, 'home/upload.html')
 
 '''
 ## What Changed
@@ -529,44 +528,7 @@ def upload_file(request):
 
 @login_required
 
-def file_list(request):
-    files = UploadedFile.objects.filter(user=request.user)
-    return render(request, 'home/file_list.html', {'files': files})
 
-@login_required
-
-def download_file(request, file_id):
-
-    try:
-        file_record = UploadedFile.objects.get(id=file_id, user=request.user)
-        # Generate presigned URL (valid for 1 hour)
-
-        s3_client = boto3.client(
-            's3',
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_S3_REGION_NAME
-        )
-
-        download_url = s3_client.generate_presigned_url(
-            'get_object',
-            Params={
-                'Bucket': settings.AWS_STORAGE_BUCKET_NAME,
-                'Key': file_record.s3_key
-            },
-            ExpiresIn=3600  # 1 hour
-        )
-        return redirect(download_url)
-    
-    except UploadedFile.DoesNotExist:
-        messages.error(request, "File not found.")
-        return redirect('file_list')
-    except Exception as e:
-        logger.error(f"Download error: {e}")
-        messages.error(request, "Failed to generate download link.")
-        return redirect('file_list')
-    
-#View classified files
 
 
 #my ticket
@@ -647,8 +609,11 @@ def ticket_list(request):
     return render(request, "tickets/ticket_list.html", {"tickets": tickets, "is_gov": is_gov})
 
 @login_required
-def ticket_detail(request, ticket_id):
-    ticket = get_object_or_404(Ticket, id=ticket_id)
+def ticket_detail(request, ticket_uuid): # Changed from ticket_id to ticket_uuid
+    # 1. Fetch by UUID (Unguessable ID)
+    # This prevents 'IDOR Injection' by stopping ID enumeration attacks.
+    ticket = get_object_or_404(Ticket, id=ticket_uuid)
+    
     user = request.user
     
     # --- A. Determine Role ---
@@ -656,12 +621,13 @@ def ticket_detail(request, ticket_id):
     is_owner = (ticket.citizen == user)
     
     has_access = False
-    can_edit = False  # <--- Default to False (Read-Only)
+    can_edit = False 
 
     # --- B. Check Access Rights ---
     if is_owner:
         has_access = True
         can_edit = False # Citizens cannot edit gov fields
+        
     elif is_gov:
         if user.is_superuser:
             has_access = True
@@ -674,18 +640,17 @@ def ticket_detail(request, ticket_id):
                 # 🦷 DENTAL TICKET LOGIC
                 # ===================================================
                 if ticket.category == 'DENTAL':
-                    # Rule 1: EthanLim has FULL access (View + Edit)
+                    # Rule 1: EthanLim has FULL access
                     if user.username == "EthanLim":
                         has_access = True
                         can_edit = True
                     
                     # Rule 2: Senior Health Staff (Level 2+) can VIEW ONLY
-                    # (Assuming 'HEALTH' is your department code)
                     elif staff.department == 'HEALTH' and staff.security_level >= 2:
                         has_access = True
-                        can_edit = False  # <--- READ ONLY MODE
+                        can_edit = False 
                         
-                    # Rule 3: Everyone else (Juniors/Other Depts) -> BLOCKED
+                    # Rule 3: Everyone else BLOCKED
                     else:
                         has_access = False
                 
@@ -693,6 +658,7 @@ def ticket_detail(request, ticket_id):
                 # 📂 STANDARD TICKET LOGIC
                 # ===================================================
                 else:
+                    # Strict Department & Clearance Check
                     if staff.department == ticket.department and staff.security_level >= ticket.min_clearance:
                         has_access = True
                         can_edit = True
@@ -704,15 +670,18 @@ def ticket_detail(request, ticket_id):
 
     # --- C. 🛑 HANDLE ACCESS DENIED ---
     if not has_access:
+        # SECURITY TIP: Log the attempted IDOR
         TicketLog.objects.create(
             ticket=ticket,
             user=user,
             action="UNAUTHORIZED_ACCESS",
-            details=f"User {user.username} blocked from viewing."
+            details=f"IDOR Attempt: User {user.username} tried to access ticket {ticket.id}"
         )
+        # Use 404 instead of 403 to hide existence of the ticket from attackers
+        # or stick to 403 if you want to be explicit about permission denied.
         return render(request, 'home/noaccess.html', status=403)
 
-    # --- D. ✅ HANDLE ACCESS GRANTED (Log View) ---
+    # --- D. ✅ HANDLE ACCESS GRANTED ---
     if is_gov:
         TicketLog.objects.create(
             ticket=ticket,
@@ -723,16 +692,14 @@ def ticket_detail(request, ticket_id):
 
     # --- E. Handle Updates (POST Request) ---
     if request.method == "POST" and is_gov:
-        # SECURITY CHECK: Ensure user has Edit rights before processing
         if not can_edit:
-            messages.error(request, "⚠️ Permission Denied: You are in Read-Only mode for this ticket.")
-            return redirect("ticket_detail", ticket_id=ticket.id)
+            messages.error(request, "⚠️ Permission Denied: Read-Only mode.")
+            return redirect("ticket_detail", ticket_uuid=ticket.id)
 
         new_status = request.POST.get("status")
         response = request.POST.get("gov_response")
         new_sensitivity = request.POST.get("sensitivity")
         
-        # Log the update details
         changes = []
         if new_status and new_status != ticket.status: changes.append(f"Status: {new_status}")
         if new_sensitivity: changes.append(f"Clearance: {new_sensitivity}")
@@ -745,7 +712,6 @@ def ticket_detail(request, ticket_id):
             details=", ".join(changes)
         )
 
-        # Apply changes
         if new_status: ticket.status = new_status
         if response:
             ticket.gov_response = response
@@ -754,19 +720,20 @@ def ticket_detail(request, ticket_id):
         
         ticket.save()
         messages.success(request, "Ticket updated.")
-        return redirect("ticket_detail", ticket_id=ticket.id)
+        return redirect("ticket_detail", ticket_uuid=ticket.id)
 
-    # --- F. Prepare Data for Template ---
+    # --- F. Prepare Data ---
     context = {
         "ticket": ticket,
         "is_gov": is_gov,
-        "can_edit": can_edit, # <--- Pass this to template to hide/show buttons
+        "can_edit": can_edit,
         "sensitivity_levels": Ticket.TICKET_SENSITIVITY,
         "logs": ticket.logs.all().order_by('-timestamp')
     }
 
+    # ... (Your existing context building logic for profile) ...
     if is_gov:
-        try:
+         try:
             profile = ticket.citizen.citizenprofile
             citizen_info = {
                 "username": ticket.citizen.username,
@@ -774,17 +741,14 @@ def ticket_detail(request, ticket_id):
                 "phone": mask_phone(profile.get_phone()),
                 "blood_type": profile.blood_type,
             }
-            
-            # Privacy Filter: Only EthanLim sees raw Dental data
             if user.username == "EthanLim":
                 citizen_info["dental_stuff"] = profile.dental_stuff
             elif staff.department == 'HEALTH' and staff.security_level >= 2:
-                 citizen_info["dental_stuff"] = profile.dental_stuff # Senior Health can see it
+                 citizen_info["dental_stuff"] = profile.dental_stuff
             else:
                 citizen_info["dental_stuff"] = "Restricted"
-                
             context["citizen_info"] = citizen_info
-        except:
+         except:
             context["citizen_info"] = None
 
     return render(request, "tickets/ticket_detail.html", context)
@@ -802,7 +766,7 @@ def view_logs(request):
     
     return render(request, "tickets/logs.html", {"logs": logs})
 
-
+#calean
 
 def verify_2fa(request):
     """Verify 2FA code"""
@@ -950,3 +914,142 @@ def security_settings(request):
         "two_factor_enabled": profile.two_factor_enabled,
         "recent_codes": recent_codes
     })
+@login_required
+
+def upload_file(request):
+    if request.method == 'POST' and request.FILES.get('file'):
+        uploaded_file = request.FILES['file']
+
+        # Generate unique filename
+        file_extension = uploaded_file.name.split('.')[-1]
+        unique_filename = f"{uuid.uuid4()}.{file_extension}"
+        s3_key = f"uploads/{request.user.username}/{unique_filename}"
+
+        try:
+            # STEP 1: Read file content for scanning and classification
+            file_content = uploaded_file.read()
+
+            # STEP 2: MALWARE SCAN (NEW)
+            from .malware_scanner import MalwareScanner
+            
+            logger.info("=" * 50)
+            logger.info("ABOUT TO CALL MALWARE SCANNER")
+            logger.info(f"File size to scan: {len(file_content)} bytes")
+            logger.info("=" * 50)
+
+            is_safe, scan_result = MalwareScanner.scan_file(file_content)
+            
+            logger.info("=" * 50)
+            logger.info(f"SCANNER RETURNED: is_safe={is_safe}, result={scan_result}")
+            logger.info("=" * 50)
+            
+            if not is_safe:
+                # Malware detected - block upload
+                messages.error(request, f"🦠 Upload blocked! Malware detected: {scan_result}")
+                logger.warning(f"Malware detected in upload by {request.user.username}: {scan_result}")
+                return redirect('upload_file')
+            
+            # STEP 3: File Classification (OCR)
+            from .classification import OCRClassifier
+
+            classification, confidence, matched_patterns = OCRClassifier.classify_with_ocr(
+                file_content,
+                uploaded_file.name,
+                uploaded_file.content_type
+            )
+
+            # Reset file pointer for S3 upload
+            uploaded_file.seek(0)
+
+            # STEP 4: Upload to S3
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+                region_name=settings.AWS_S3_REGION_NAME
+            )
+
+            s3_client.upload_fileobj(
+                uploaded_file,
+                settings.AWS_STORAGE_BUCKET_NAME,
+                s3_key,
+                ExtraArgs={'ContentType': uploaded_file.content_type}
+            )
+
+            # STEP 5: Save to database with both classification AND malware status
+            file_record = UploadedFile.objects.create(
+                user=request.user,
+                file_name=uploaded_file.name,
+                file_size=uploaded_file.size,
+                s3_key=s3_key,
+                file_type=uploaded_file.content_type,
+                # Classification fields
+                classification=classification,
+                classification_confidence=confidence,
+                classification_patterns=json.dumps(matched_patterns[:5]),
+                classified_at=timezone.now(),
+                # Malware fields
+                malware_scan_status='CLEAN' if is_safe else 'INFECTED',
+                malware_scan_date=timezone.now(),
+                virus_name=scan_result if not is_safe else None
+            )
+
+            messages.success(
+                request, 
+                f"✅ File '{uploaded_file.name}' uploaded successfully!\n"
+                f"Classification: {classification} (confidence: {confidence})\n"
+                f"Malware Scan: {scan_result}"
+            )
+
+            return redirect('file_list')
+
+        except ClientError as e:
+            logger.error(f"S3 upload error: {e}")
+            messages.error(request, "Failed to upload file to cloud storage.")
+            return redirect('upload_file')
+
+        except Exception as e:
+            logger.error(f"Upload error: {e}")
+            messages.error(request, f"An error occurred: {str(e)}")
+            return redirect('upload_file')
+
+    return render(request, 'home/upload.html')
+
+@login_required
+
+def file_list(request):
+    files = UploadedFile.objects.filter(user=request.user)
+    return render(request, 'home/file_list.html', {'files': files})
+
+@login_required
+
+def download_file(request, file_id):
+
+    try:
+        file_record = UploadedFile.objects.get(id=file_id, user=request.user)
+        # Generate presigned URL (valid for 1 hour)
+
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+            region_name=settings.AWS_S3_REGION_NAME
+        )
+
+        download_url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={
+                'Bucket': settings.AWS_STORAGE_BUCKET_NAME,
+                'Key': file_record.s3_key
+            },
+            ExpiresIn=3600  # 1 hour
+        )
+        return redirect(download_url)
+    
+    except UploadedFile.DoesNotExist:
+        messages.error(request, "File not found.")
+        return redirect('file_list')
+    except Exception as e:
+        logger.error(f"Download error: {e}")
+        messages.error(request, "Failed to generate download link.")
+        return redirect('file_list')
