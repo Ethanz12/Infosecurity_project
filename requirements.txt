@@ -17,3 +17,4 @@ regex>=2023.10.1
 nltk>=3.8.0
 spacy>=3.6.0
 pyclamd>=0.4.0
+python-magic>=0.4.27
