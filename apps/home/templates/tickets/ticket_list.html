@@ -45,7 +45,7 @@
                         </td>
                         <td>{{ ticket.created_at|date:"M d, Y" }}</td>
                         <td>
-                            <a href="{% url 'ticket_detail' ticket.id %}" class="btn btn-sm btn-outline-primary">View Details</a>
+                            <a href="{% url 'ticket_detail' ticket_uuid=ticket.id %}">View Details</a>
                         </td>
                     </tr>
                     {% empty %}

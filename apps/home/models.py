@@ -4,10 +4,12 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from security.crypto import encrypt, decrypt 
 
+
 from django.utils import timezone
 from datetime import timedelta
 import random
 import string
+import uuid
 
 # --- CONFIGURATION: Singapore Departments (ABAC Attributes) ---
 DEPARTMENTS = [
@@ -151,6 +153,7 @@ class UploadedFile(models.Model):
 # ----------------------------
 
 class Ticket(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     STATUS_CHOICES = [
         ('OPEN', 'Open'),
         ('IN_PROGRESS', 'In Progress'),
