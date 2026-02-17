@@ -357,8 +357,176 @@ def test_db_connection(request):
     except Exception:
         return HttpResponse("Database connection failed", status=500)
     
+#S3 Stuff
 
 
+@login_required
+def upload_file(request):
+    if request.method == 'POST' and request.FILES.get('file'):
+        uploaded_file = request.FILES['file']
+
+        # Generate unique filename
+        file_extension = uploaded_file.name.split('.')[-1]
+        unique_filename = f"{uuid.uuid4()}.{file_extension}"
+        s3_key = f"uploads/{request.user.username}/{unique_filename}"
+
+        try:
+            # STEP 1: Read file content
+            file_content = uploaded_file.read()
+
+            # =========================================
+            # STEP 2: REAL FILE TYPE DETECTION (NEW)
+            # =========================================
+            import magic
+
+            mime = magic.from_buffer(file_content, mime=True)
+            logger.info(f"Browser reported type: {uploaded_file.content_type}")
+            logger.info(f"Real detected type:    {mime}")
+
+            # Block dangerous file types regardless of extension
+            BLOCKED_MIME_TYPES = [
+                'application/x-dosexec',        # .exe, .dll
+                'application/x-msdownload',     # .exe, .dll (alternate)
+                'application/x-executable',     # Linux executables
+                'application/x-sharedlib',      # .so files
+                'application/x-sh',             # shell scripts
+                'application/x-bat',            # batch files
+                'application/x-msdos-program',  # MS-DOS programs
+                'application/x-python',         # Python scripts
+                'application/java-archive',     # .jar files
+                'application/x-java-applet',    # Java applets
+                'text/x-shellscript',       # ← this is what evil_photo.jpg was detected as
+                'text/x-python',            # Python scripts detected as text
+                'text/x-perl',              # Perl scripts
+                'text/x-ruby',              # Ruby scripts
+            ]
+
+            if mime in BLOCKED_MIME_TYPES:
+                logger.warning(
+                    f"Blocked file upload by {request.user.username}: "
+                    f"'{uploaded_file.name}' detected as {mime}"
+                )
+                messages.error(
+                    request,
+                    f"❌ File type not allowed: '{uploaded_file.name}' "
+                    f"was detected as '{mime}'. Executable files are blocked."
+                )
+                return redirect('upload_file')
+
+            # Use detected MIME type (not browser-reported) for storage
+            detected_file_type = mime
+
+            # =========================================
+            # STEP 3: MALWARE SCAN
+            # =========================================
+            from .malware_scanner import MalwareScanner
+
+            logger.info("=" * 50)
+            logger.info("ABOUT TO CALL MALWARE SCANNER")
+            logger.info(f"File size to scan: {len(file_content)} bytes")
+            logger.info("=" * 50)
+
+            is_safe, scan_result = MalwareScanner.scan_file(file_content)
+
+            logger.info("=" * 50)
+            logger.info(f"SCANNER RETURNED: is_safe={is_safe}, result={scan_result}")
+            logger.info("=" * 50)
+
+            if not is_safe:
+                messages.error(request, f"🦠 Upload blocked! Malware detected: {scan_result}")
+                logger.warning(f"Malware detected in upload by {request.user.username}: {scan_result}")
+                return redirect('upload_file')
+
+            # =========================================
+            # STEP 4: FILE CLASSIFICATION (OCR)
+            # =========================================
+            from .classification import OCRClassifier
+
+            classification, confidence, matched_patterns = OCRClassifier.classify_with_ocr(
+                file_content,
+                uploaded_file.name,
+                detected_file_type  # use real type, not browser type
+            )
+
+            # Reset file pointer for S3 upload
+            uploaded_file.seek(0)
+
+            # =========================================
+            # STEP 5: UPLOAD TO S3
+            # =========================================
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+                region_name=settings.AWS_S3_REGION_NAME
+            )
+
+            s3_client.upload_fileobj(
+                uploaded_file,
+                settings.AWS_STORAGE_BUCKET_NAME,
+                s3_key,
+                ExtraArgs={'ContentType': detected_file_type}
+            )
+
+            # =========================================
+            # STEP 6: SAVE TO DATABASE
+            # =========================================
+            file_record = UploadedFile.objects.create(
+                user=request.user,
+                file_name=uploaded_file.name,
+                file_size=uploaded_file.size,
+                s3_key=s3_key,
+                file_type=detected_file_type,  # store REAL type
+                classification=classification,
+                classification_confidence=confidence,
+                classification_patterns=json.dumps(matched_patterns[:5]),
+                classified_at=timezone.now(),
+                malware_scan_status='CLEAN' if is_safe else 'INFECTED',
+                malware_scan_date=timezone.now(),
+                virus_name=scan_result if not is_safe else None
+            )
+
+            messages.success(
+                request,
+                f"✅ File '{uploaded_file.name}' uploaded successfully! "
+                f"Type: {detected_file_type} | "
+                f"Classification: {classification} | "
+                f"Malware: {scan_result}"
+            )
+
+            return redirect('file_list')
+
+        except ClientError as e:
+            logger.error(f"S3 upload error: {e}")
+            messages.error(request, "Failed to upload file to cloud storage.")
+            return redirect('upload_file')
+
+        except Exception as e:
+            logger.error(f"Upload error: {e}")
+            messages.error(request, f"An error occurred: {str(e)}")
+            return redirect('upload_file')
+
+
+'''
+## What Changed
+    The upload pipeline is now 6 steps instead of 5:
+    ```
+    Browser upload
+        ↓
+    STEP 2 (NEW): python-magic checks real file type
+        → Blocks .exe, .dll, .sh, .jar etc. even if renamed to .pdf
+        ↓
+    STEP 3: ClamAV malware scan
+        → Blocks known malware signatures
+        ↓
+    STEP 4: OCR classification
+        ↓
+    STEP 5: S3 upload (uses real MIME type, not browser-reported)
+        ↓
+    STEP 6: Save to DB (stores real file type)
+'''
+
+@login_required
 
 
 

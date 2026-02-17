@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y \
     dos2unix \
     clamav \
     clamav-daemon \
+    libmagic1 \
     && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------
