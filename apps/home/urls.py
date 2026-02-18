@@ -17,6 +17,8 @@ urlpatterns = [
     path('tickets/create/', views.create_ticket, name='create_ticket'),
     path('ticket/<uuid:ticket_uuid>/', views.ticket_detail, name='ticket_detail'),
     path('logs/', views.view_logs, name='view_logs'),
+    path('staff/medical/update/<int:citizen_id>/', views.update_medical_record, name='update_medical_record'),
+    path('staff/dental/all/', views.dental_record_list, name='dental_record_list'),
 
     path('verify-2fa/', views.verify_2fa, name='verify_2fa'),
     path('resend-2fa/', views.resend_2fa_code, name='resend_2fa'),

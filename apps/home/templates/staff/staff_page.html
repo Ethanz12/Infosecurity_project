@@ -1,110 +1,173 @@
 {% extends "home/base.html" %}
 
-{% block content %}
-<div class="container mt-5">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>🏛️ Government Staff Portal</h2>
-        <span class="badge bg-secondary">Official Use Only</span>
-    </div>
+{% block title %}Staff Portal - SecureGov{% endblock %}
 
+{% block content %}
+
+<div class="staff-hero">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="fw-bold"><i class="fas fa-building-columns me-2"></i> Staff Portal</h1>
+                <p class="text-white-50 mb-0">Internal tools for authorized government personnel.</p>
+            </div>
+            <div class="d-none d-md-block">
+                <span class="badge bg-warning text-dark px-3 py-2 shadow-sm">
+                    <i class="fas fa-shield-alt me-1"></i> Official Use Only
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container staff-container">
     <div class="row">
-        <div class="col-md-4 mb-4">
-            <div class="card shadow-sm border-primary h-100">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">Staff Identity</h5>
-                </div>
-                <div class="card-body">
-                    <div class="text-center mb-3">
-                        <div style="font-size: 3rem;">👮‍♂️</div>
-                        <h4 class="mt-2">{{ user.username|title }}</h4>
-                        <p class="text-muted">{{ user.email }}</p>
+        
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow border-0 profile-card h-100">
+                <div class="card-body text-center pt-5 pb-4 px-4">
+                    <div class="avatar-box mx-auto shadow-sm">
+                        <span class="fw-bold">{{ user.username|slice:":1" }}</span>
                     </div>
                     
-                    <hr>
+                    <h4 class="fw-bold text-dark mt-3 mb-0">{{ user.username|title }}</h4>
+                    <p class="text-muted small mb-4">{{ user.email }}</p>
 
-                    <dl class="row">
-                        <dt class="col-sm-5">Department:</dt>
-                        <dd class="col-sm-7 fw-bold text-primary">
-                            {% if user.staffprofile %}
-                                {{ user.staffprofile.get_department_display }}
-                            {% else %}
-                                <span class="text-danger">Not Assigned</span>
-                            {% endif %}
-                        </dd>
-
-                        <dt class="col-sm-5">Clearance:</dt>
-                        <dd class="col-sm-7">
-                            {% if user.staffprofile %}
+                    <div class="text-start bg-light p-3 rounded-3 mb-3">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="small text-muted fw-bold">DEPARTMENT</span>
+                            <span class="small fw-bold text-primary">
+                                {% if user.staffprofile %}
+                                    {{ user.staffprofile.get_department_display }}
+                                {% else %}
+                                    Unassigned
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="small text-muted fw-bold">CLEARANCE</span>
+                            <span>
                                 {% if user.staffprofile.security_level >= 2 %}
                                     <span class="badge bg-danger">Level 2 (Senior)</span>
                                 {% else %}
                                     <span class="badge bg-info text-dark">Level 1 (Junior)</span>
                                 {% endif %}
-                            {% else %}
-                                N/A
-                            {% endif %}
-                        </dd>
-
-                        <dt class="col-sm-5">Location Access:</dt>
-                        <dd class="col-sm-7">
-                            {% if user.staffprofile.can_access_location %}
-                                <span class="badge bg-success">GRANTED</span>
-                            {% else %}
-                                <span class="badge bg-secondary">RESTRICTED</span>
-                            {% endif %}
-                        </dd>
-                    </dl>
+                            </span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="small text-muted fw-bold">LOCATION</span>
+                            <span>
+                                {% if user.staffprofile.can_access_location %}
+                                    <span class="badge bg-success">Granted</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Restricted</span>
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <a href="{% url 'logout' %}" class="btn btn-outline-danger btn-sm">
+                            <i class="fas fa-sign-out-alt me-1"></i> Sign Out
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="col-md-8">
-            <div class="card shadow-sm mb-4">
-                <div class="card-body">
-                    <h4 class="card-title">My Tasks</h4>
-                    <p class="card-text">
-                        You are authorized to view tickets routed to 
-                        <strong>{{ user.staffprofile.get_department_display }}</strong> 
-                        with a sensitivity level of 
-                        <strong>{{ user.staffprofile.security_level }}</strong> or lower.
-                    </p>
-                    
-                    <div class="d-grid gap-2">
-                        <a href="{% url 'ticket_list' %}" class="btn btn-primary btn-lg">
-                            📂 Access Department Tickets
-                        </a>
+        <div class="col-lg-8">
+            
+            <div class="card shadow-sm border-0 mb-4 border-start border-5 border-primary">
+                <div class="card-body p-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
+                    <div>
+                        <h5 class="fw-bold text-primary mb-1">Assigned Tasks</h5>
+                        <p class="text-muted small mb-0">
+                            Viewing <strong>{{ user.staffprofile.get_department_display }}</strong> tickets 
+                            (Level {{ user.staffprofile.security_level }} & below).
+                        </p>
                     </div>
+                    <a href="{% url 'ticket_list' %}" class="btn btn-primary px-4 shadow-sm">
+                        <i class="fas fa-inbox me-2"></i> View Inbox
+                    </a>
                 </div>
             </div>
 
             <div class="row g-3">
                 
-                <div class="col-md-4">
-                    <div class="card h-100 bg-light border-0">
-                        <div class="card-body text-center">
-                            <h5>Search Database</h5>
-                            <p class="small text-muted">Lookup citizen records</p>
-                            <button class="btn btn-outline-secondary btn-sm" disabled>Coming Soon</button>
+                <div class="col-md-6">
+                    <div class="card h-100 border-0 shadow-sm hover-card">
+                        <div class="card-body p-4 text-center">
+                            <div class="icon-circle bg-danger bg-opacity-10 text-danger mx-auto mb-3">
+                                <i class="fas fa-heart-pulse"></i>
+                            </div>
+                            <h6 class="fw-bold">Medical Registry</h6>
+                            <p class="small text-muted mb-3">Access sensitive patient data</p>
+                            
+                            {% if user.staffprofile.department == 'HEALTH' and user.staffprofile.security_level >= 2 %}
+                                <a href="{% url 'dental_record_list' %}" class="btn btn-outline-danger btn-sm w-100 mb-2">
+                                    <i class="fas fa-list me-1"></i> View All Records
+                                </a>
+                                
+                                <form action="" method="get" class="d-flex gap-1" onsubmit="event.preventDefault(); goToMedicalUpdate(this);">
+                                    <input type="number" class="form-control form-control-sm" placeholder="ID #" id="citizenIdInput" required>
+                                    <button class="btn btn-danger btn-sm" type="submit">Go</button>
+                                </form>
+                                <script>
+                                    function goToMedicalUpdate(form) {
+                                        var id = form.querySelector('#citizenIdInput').value;
+                                        if(id) window.location.href = "/staff/medical/update/" + id + "/";
+                                    }
+                                </script>
+                            {% else %}
+                                <button class="btn btn-light btn-sm w-100 text-muted" disabled>
+                                    <i class="fas fa-lock me-1"></i> Restricted
+                                </button>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
 
-                <div class="col-md-4">
-                    <div class="card h-100 bg-light border-0">
-                        <div class="card-body text-center">
-                            <h5>Upload Internal</h5>
-                            <p class="small text-muted">Secure S3 Storage</p>
-                            <a href="{% url 'upload_file' %}" class="btn btn-outline-dark btn-sm">Go to Uploads</a>
+                <div class="col-md-6">
+                    <div class="card h-100 border-0 shadow-sm hover-card">
+                        <div class="card-body p-4 text-center">
+                            <div class="icon-circle bg-dark bg-opacity-10 text-dark mx-auto mb-3">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                            </div>
+                            <h6 class="fw-bold">Secure Storage</h6>
+                            <p class="small text-muted mb-3">Upload encrypted documents</p>
+                            <a href="{% url 'upload_file' %}" class="btn btn-outline-dark btn-sm w-100">
+                                <i class="fas fa-plus me-1"></i> Upload File
+                            </a>
                         </div>
                     </div>
                 </div>
 
-                <div class="col-md-4">
-                    <div class="card h-100 bg-light border-0">
-                        <div class="card-body text-center">
-                            <h5>System Logs</h5>
-                            <p class="small text-muted">Tickets Logs</p>
-                            <a href="{% url 'view_logs' %}" class="btn btn-outline-danger btn-sm">View Audit Logs</a>
+                <div class="col-md-6">
+                    <div class="card h-100 border-0 shadow-sm hover-card">
+                        <div class="card-body p-4 text-center">
+                            <div class="icon-circle bg-secondary bg-opacity-10 text-secondary mx-auto mb-3">
+                                <i class="fas fa-clipboard-list"></i>
+                            </div>
+                            <h6 class="fw-bold">Audit Logs</h6>
+                            <p class="small text-muted mb-3">Review system access trails</p>
+                            <a href="{% url 'view_logs' %}" class="btn btn-outline-secondary btn-sm w-100">
+                                <i class="fas fa-eye me-1"></i> View Activity
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card h-100 border-0 shadow-sm bg-light">
+                        <div class="card-body p-4 text-center opacity-75">
+                            <div class="icon-circle bg-secondary bg-opacity-10 text-muted mx-auto mb-3">
+                                <i class="fas fa-database"></i>
+                            </div>
+                            <h6 class="fw-bold text-muted">Citizen DB</h6>
+                            <p class="small text-muted mb-3">Maintenance Mode</p>
+                            <button class="btn btn-outline-secondary btn-sm w-100" disabled>
+                                Unavailable
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -113,4 +176,46 @@
         </div>
     </div>
 </div>
+
+<style>
+    /* Hero Style */
+    .staff-hero {
+        background: linear-gradient(135deg, #0A2342 0%, #1a4575 100%);
+        color: white;
+        padding: 3rem 0 5rem 0; /* Extra bottom padding */
+        margin-bottom: -3rem; /* Pulls content up */
+    }
+
+    /* Floating Profile Card */
+    .profile-card {
+        margin-top: -1rem; /* Slight offset */
+    }
+    
+    .avatar-box {
+        width: 80px; height: 80px; 
+        border-radius: 50%; 
+        background-color: #f8f9fa;
+        color: #0A2342;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 2.5rem;
+        border: 4px solid white;
+    }
+
+    /* Icon Circles */
+    .icon-circle {
+        width: 50px; height: 50px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.5rem;
+    }
+
+    /* Hover Effects */
+    .hover-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .hover-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
+    }
+</style>
+
 {% endblock %}

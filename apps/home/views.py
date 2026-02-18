@@ -80,56 +80,35 @@ def mask_phone(phone: str):
 # --------------------
 
 class CitizenProfileForm(forms.Form):
+    # REMOVED dental_stuff from here so citizens can't even submit it
     nric = forms.CharField(max_length=9, required=False)
     phone = forms.CharField(max_length=15, required=False)
     address = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), required=False)
-    
-    # --- NEW FIELDS ---
-    blood_type = forms.CharField(max_length=5, required=False, label="Blood Type")
-    dental_stuff = forms.CharField(
-        widget=forms.Textarea(attrs={"rows": 3, "placeholder": "Dental records..."}), 
-        required=False, 
-        label="Dental Information"
-    )
+    blood_type = forms.CharField(max_length=5, required=False, label="Blood Type") 
 
+    # ... (Keep your existing clean_nric and clean_phone methods here) ...
     def clean_nric(self):
         nric = self.cleaned_data.get("nric")
-
-        if not nric:
-            return nric
-
-        # Ignore masked display value
-        if "*" in nric:
-            return nric
-
-        if len(nric) != 9:
-            raise forms.ValidationError(
-                "NRIC must be exactly 9 characters."
-            )
-
+        if not nric: return nric
+        if "*" in nric: return nric
+        if len(nric) != 9: raise forms.ValidationError("NRIC must be exactly 9 characters.")
         return nric
 
     def clean_phone(self):
         phone = self.cleaned_data.get("phone")
-
-        if not phone:
-            return phone
-
-        # Ignore masked display value
-        if "*" in phone:
-            return phone
-
-        if not phone.isdigit():
-            raise forms.ValidationError(
-                "Phone number must contain digits only."
-            )
-
-        if len(phone) < 8:
-            raise forms.ValidationError(
-                "Phone number must be at least 8 digits."
-            )
-
+        if not phone: return phone
+        if "*" in phone: return phone
+        if not phone.isdigit(): raise forms.ValidationError("Digits only.")
+        if len(phone) < 8: raise forms.ValidationError("Min 8 digits.")
         return phone
+
+# --- NEW FORM FOR HEALTH STAFF ---
+class MedicalStaffForm(forms.Form):
+    dental_stuff = forms.CharField(
+        widget=forms.Textarea(attrs={"rows": 3, "placeholder": "Enter patient dental records..."}), 
+        required=True, 
+        label="Dental Information"
+    )
 
 # --------------------
 # Views
@@ -137,6 +116,9 @@ class CitizenProfileForm(forms.Form):
 
 @login_required
 def profile_view(request):
+    """
+    Citizen View: Can edit contact info, but ONLY VIEW dental info.
+    """
     profile, created = CitizenProfile.objects.get_or_create(user=request.user)
 
     if request.method == "POST":
@@ -145,11 +127,9 @@ def profile_view(request):
             nric = form.cleaned_data.get("nric")
             phone = form.cleaned_data.get("phone")
             address = form.cleaned_data.get("address")
-            
-            # --- NEW FIELDS ---
             blood_type = form.cleaned_data.get("blood_type")
-            dental_stuff = form.cleaned_data.get("dental_stuff")
-
+            
+            # --- UPDATING CONTACT INFO ---
             def is_masked(value):
                 return value and "*" in value
 
@@ -159,14 +139,13 @@ def profile_view(request):
                 profile.set_phone(phone)
             if address:
                 profile.set_address(address)
-            
-            # --- SAVE NEW FIELDS ---
             if blood_type:
                 profile.blood_type = blood_type
-            if dental_stuff:
-                profile.dental_stuff = dental_stuff
-
-            # Update full name & email
+            
+            # --- SECURITY FIX: DENTAL STUFF IS REMOVED FROM SAVE LOGIC ---
+            # We do not check for or save 'dental_stuff' here anymore.
+            
+            # Update User Model (Name/Email)
             full_name = request.POST.get("full_name", "").strip()
             if full_name:
                 parts = full_name.split(" ", 1)
@@ -183,29 +162,98 @@ def profile_view(request):
             messages.success(request, "Profile updated successfully.")
             return redirect("profile")
 
-    # --- GET REQUEST HANDLING ---
+    # --- GET REQUEST ---
     else:
-        # Pre-fill form with existing data
         initial_data = {
             "full_name": request.user.get_full_name(),
             "email": request.user.email,
             "nric": mask_nric(profile.get_nric()),
             "phone": mask_phone(profile.get_phone()),
             "address": profile.get_address(),
-            # Load existing values
             "blood_type": profile.blood_type,
-            "dental_stuff": profile.dental_stuff,
         }
         
         context = {
             "form_data": initial_data,
-            "errors": {},
             "user": request.user,
             "masked_nric": mask_nric(profile.get_nric()),
             "masked_phone": mask_phone(profile.get_phone()),
+            # Pass dental info for VIEWING ONLY
+            "dental_info_display": profile.dental_stuff 
         }
         return render(request, "home/profile.html", context)
 
+
+@login_required
+def update_medical_record(request, citizen_id):
+    """
+    Staff View: Allows Health Dept (Lvl 2+) to edit dental records.
+    """
+    # 1. Verify User is Staff
+    if not (request.user.is_staff or request.user.groups.filter(name="GovernmentWorker").exists()):
+        return render(request, 'home/noaccess.html', status=403)
+
+    # 2. Verify Department (HEALTH) and Clearance (Level >= 2)
+    try:
+        staff_profile = StaffProfile.objects.get(user=request.user)
+        
+        # --- ABAC RULE IMPLEMENTATION ---
+        if staff_profile.department != 'HEALTH' or staff_profile.security_level < 2:
+            messages.error(request, "Access Denied: You need Health Dept Level 2 clearance.")
+            return render(request, 'home/noaccess.html', status=403)
+            
+    except StaffProfile.DoesNotExist:
+        return render(request, 'home/noaccess.html', status=403)
+
+    # 3. Get the Target Citizen
+    target_user = get_object_or_404(User, id=citizen_id)
+    target_profile, _ = CitizenProfile.objects.get_or_create(user=target_user)
+
+    # 4. Handle Form
+    if request.method == "POST":
+        form = MedicalStaffForm(request.POST)
+        if form.is_valid():
+            new_dental = form.cleaned_data.get("dental_stuff")
+            
+            # Save the restricted data
+            target_profile.dental_stuff = new_dental
+            target_profile.save()
+            
+            # Log the action (Good practice for medical records)
+            logger.info(f"Medical Record Updated: Staff {request.user.username} updated Citizen {target_user.username}")
+            
+            messages.success(request, f"Dental records updated for {target_user.username}")
+            return redirect("ticket_list") # Or wherever you want to redirect
+    else:
+        form = MedicalStaffForm(initial={"dental_stuff": target_profile.dental_stuff})
+
+    return render(request, "staff/edit_medical.html", {
+        "form": form, 
+        "target_user": target_user
+    })
+
+@login_required
+def dental_record_list(request):
+    """
+    Staff View: Lists all citizens with their dental record status.
+    Strictly for Health Dept (Level 2+).
+    """
+    # 1. Security Check (ABAC)
+    try:
+        staff_profile = StaffProfile.objects.get(user=request.user)
+        if staff_profile.department != 'HEALTH' or staff_profile.security_level < 2:
+            return render(request, 'home/noaccess.html', status=403)
+    except StaffProfile.DoesNotExist:
+        return render(request, 'home/noaccess.html', status=403)
+
+    # 2. Fetch all Citizen Profiles
+    # Select_related optimizes the DB query since we need User details too
+    profiles = CitizenProfile.objects.select_related('user').all().order_by('user__username')
+
+    context = {
+        "profiles": profiles
+    }
+    return render(request, "staff/dental_list.html", context)
 
 @login_required
 def staff_page(request):
@@ -357,176 +405,7 @@ def test_db_connection(request):
     except Exception:
         return HttpResponse("Database connection failed", status=500)
     
-#S3 Stuff
 
-
-@login_required
-def upload_file(request):
-    if request.method == 'POST' and request.FILES.get('file'):
-        uploaded_file = request.FILES['file']
-
-        # Generate unique filename
-        file_extension = uploaded_file.name.split('.')[-1]
-        unique_filename = f"{uuid.uuid4()}.{file_extension}"
-        s3_key = f"uploads/{request.user.username}/{unique_filename}"
-
-        try:
-            # STEP 1: Read file content
-            file_content = uploaded_file.read()
-
-            # =========================================
-            # STEP 2: REAL FILE TYPE DETECTION (NEW)
-            # =========================================
-            import magic
-
-            mime = magic.from_buffer(file_content, mime=True)
-            logger.info(f"Browser reported type: {uploaded_file.content_type}")
-            logger.info(f"Real detected type:    {mime}")
-
-            # Block dangerous file types regardless of extension
-            BLOCKED_MIME_TYPES = [
-                'application/x-dosexec',        # .exe, .dll
-                'application/x-msdownload',     # .exe, .dll (alternate)
-                'application/x-executable',     # Linux executables
-                'application/x-sharedlib',      # .so files
-                'application/x-sh',             # shell scripts
-                'application/x-bat',            # batch files
-                'application/x-msdos-program',  # MS-DOS programs
-                'application/x-python',         # Python scripts
-                'application/java-archive',     # .jar files
-                'application/x-java-applet',    # Java applets
-                'text/x-shellscript',       # ← this is what evil_photo.jpg was detected as
-                'text/x-python',            # Python scripts detected as text
-                'text/x-perl',              # Perl scripts
-                'text/x-ruby',              # Ruby scripts
-            ]
-
-            if mime in BLOCKED_MIME_TYPES:
-                logger.warning(
-                    f"Blocked file upload by {request.user.username}: "
-                    f"'{uploaded_file.name}' detected as {mime}"
-                )
-                messages.error(
-                    request,
-                    f"❌ File type not allowed: '{uploaded_file.name}' "
-                    f"was detected as '{mime}'. Executable files are blocked."
-                )
-                return redirect('upload_file')
-
-            # Use detected MIME type (not browser-reported) for storage
-            detected_file_type = mime
-
-            # =========================================
-            # STEP 3: MALWARE SCAN
-            # =========================================
-            from .malware_scanner import MalwareScanner
-
-            logger.info("=" * 50)
-            logger.info("ABOUT TO CALL MALWARE SCANNER")
-            logger.info(f"File size to scan: {len(file_content)} bytes")
-            logger.info("=" * 50)
-
-            is_safe, scan_result = MalwareScanner.scan_file(file_content)
-
-            logger.info("=" * 50)
-            logger.info(f"SCANNER RETURNED: is_safe={is_safe}, result={scan_result}")
-            logger.info("=" * 50)
-
-            if not is_safe:
-                messages.error(request, f"🦠 Upload blocked! Malware detected: {scan_result}")
-                logger.warning(f"Malware detected in upload by {request.user.username}: {scan_result}")
-                return redirect('upload_file')
-
-            # =========================================
-            # STEP 4: FILE CLASSIFICATION (OCR)
-            # =========================================
-            from .classification import OCRClassifier
-
-            classification, confidence, matched_patterns = OCRClassifier.classify_with_ocr(
-                file_content,
-                uploaded_file.name,
-                detected_file_type  # use real type, not browser type
-            )
-
-            # Reset file pointer for S3 upload
-            uploaded_file.seek(0)
-
-            # =========================================
-            # STEP 5: UPLOAD TO S3
-            # =========================================
-            s3_client = boto3.client(
-                's3',
-                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-                region_name=settings.AWS_S3_REGION_NAME
-            )
-
-            s3_client.upload_fileobj(
-                uploaded_file,
-                settings.AWS_STORAGE_BUCKET_NAME,
-                s3_key,
-                ExtraArgs={'ContentType': detected_file_type}
-            )
-
-            # =========================================
-            # STEP 6: SAVE TO DATABASE
-            # =========================================
-            file_record = UploadedFile.objects.create(
-                user=request.user,
-                file_name=uploaded_file.name,
-                file_size=uploaded_file.size,
-                s3_key=s3_key,
-                file_type=detected_file_type,  # store REAL type
-                classification=classification,
-                classification_confidence=confidence,
-                classification_patterns=json.dumps(matched_patterns[:5]),
-                classified_at=timezone.now(),
-                malware_scan_status='CLEAN' if is_safe else 'INFECTED',
-                malware_scan_date=timezone.now(),
-                virus_name=scan_result if not is_safe else None
-            )
-
-            messages.success(
-                request,
-                f"✅ File '{uploaded_file.name}' uploaded successfully! "
-                f"Type: {detected_file_type} | "
-                f"Classification: {classification} | "
-                f"Malware: {scan_result}"
-            )
-
-            return redirect('file_list')
-
-        except ClientError as e:
-            logger.error(f"S3 upload error: {e}")
-            messages.error(request, "Failed to upload file to cloud storage.")
-            return redirect('upload_file')
-
-        except Exception as e:
-            logger.error(f"Upload error: {e}")
-            messages.error(request, f"An error occurred: {str(e)}")
-            return redirect('upload_file')
-
-
-'''
-## What Changed
-    The upload pipeline is now 6 steps instead of 5:
-    ```
-    Browser upload
-        ↓
-    STEP 2 (NEW): python-magic checks real file type
-        → Blocks .exe, .dll, .sh, .jar etc. even if renamed to .pdf
-        ↓
-    STEP 3: ClamAV malware scan
-        → Blocks known malware signatures
-        ↓
-    STEP 4: OCR classification
-        ↓
-    STEP 5: S3 upload (uses real MIME type, not browser-reported)
-        ↓
-    STEP 6: Save to DB (stores real file type)
-'''
-
-@login_required
 
 
 
@@ -655,7 +534,7 @@ def ticket_detail(request, ticket_uuid): # Changed from ticket_id to ticket_uuid
                         has_access = False
                 
                 # ===================================================
-                # 📂 STANDARD TICKET LOGIC
+                #  STANDARD TICKET LOGIC
                 # ===================================================
                 else:
                     # Strict Department & Clearance Check
@@ -668,7 +547,7 @@ def ticket_detail(request, ticket_uuid): # Changed from ticket_id to ticket_uuid
             except StaffProfile.DoesNotExist:
                 has_access = False
 
-    # --- C. 🛑 HANDLE ACCESS DENIED ---
+    # --- C.  HANDLE ACCESS DENIED ---
     if not has_access:
         # SECURITY TIP: Log the attempted IDOR
         TicketLog.objects.create(
@@ -986,3 +865,173 @@ def view_file(request, file_id):
         logger.error(f"View error: {e}")
         messages.error(request, "Failed to generate view link.")
         return redirect('file_list')
+
+#S3 Stuff
+
+
+@login_required
+def upload_file(request):
+    if request.method == 'POST' and request.FILES.get('file'):
+        uploaded_file = request.FILES['file']
+
+        # Generate unique filename
+        file_extension = uploaded_file.name.split('.')[-1]
+        unique_filename = f"{uuid.uuid4()}.{file_extension}"
+        s3_key = f"uploads/{request.user.username}/{unique_filename}"
+
+        try:
+            # STEP 1: Read file content
+            file_content = uploaded_file.read()
+
+            # =========================================
+            # STEP 2: REAL FILE TYPE DETECTION (NEW)
+            # =========================================
+            import magic
+
+            mime = magic.from_buffer(file_content, mime=True)
+            logger.info(f"Browser reported type: {uploaded_file.content_type}")
+            logger.info(f"Real detected type:    {mime}")
+
+            # Block dangerous file types regardless of extension
+            BLOCKED_MIME_TYPES = [
+                'application/x-dosexec',        # .exe, .dll
+                'application/x-msdownload',     # .exe, .dll (alternate)
+                'application/x-executable',     # Linux executables
+                'application/x-sharedlib',      # .so files
+                'application/x-sh',             # shell scripts
+                'application/x-bat',            # batch files
+                'application/x-msdos-program',  # MS-DOS programs
+                'application/x-python',         # Python scripts
+                'application/java-archive',     # .jar files
+                'application/x-java-applet',    # Java applets
+                'text/x-shellscript',       # ← this is what evil_photo.jpg was detected as
+                'text/x-python',            # Python scripts detected as text
+                'text/x-perl',              # Perl scripts
+                'text/x-ruby',              # Ruby scripts
+            ]
+
+            if mime in BLOCKED_MIME_TYPES:
+                logger.warning(
+                    f"Blocked file upload by {request.user.username}: "
+                    f"'{uploaded_file.name}' detected as {mime}"
+                )
+                messages.error(
+                    request,
+                    f"❌ File type not allowed: '{uploaded_file.name}' "
+                    f"was detected as '{mime}'. Executable files are blocked."
+                )
+                return redirect('upload_file')
+
+            # Use detected MIME type (not browser-reported) for storage
+            detected_file_type = mime
+
+            # =========================================
+            # STEP 3: MALWARE SCAN
+            # =========================================
+            from .malware_scanner import MalwareScanner
+
+            logger.info("=" * 50)
+            logger.info("ABOUT TO CALL MALWARE SCANNER")
+            logger.info(f"File size to scan: {len(file_content)} bytes")
+            logger.info("=" * 50)
+
+            is_safe, scan_result = MalwareScanner.scan_file(file_content)
+
+            logger.info("=" * 50)
+            logger.info(f"SCANNER RETURNED: is_safe={is_safe}, result={scan_result}")
+            logger.info("=" * 50)
+
+            if not is_safe:
+                messages.error(request, f"🦠 Upload blocked! Malware detected: {scan_result}")
+                logger.warning(f"Malware detected in upload by {request.user.username}: {scan_result}")
+                return redirect('upload_file')
+
+            # =========================================
+            # STEP 4: FILE CLASSIFICATION (OCR)
+            # =========================================
+            from .classification import OCRClassifier
+
+            classification, confidence, matched_patterns = OCRClassifier.classify_with_ocr(
+                file_content,
+                uploaded_file.name,
+                detected_file_type  # use real type, not browser type
+            )
+
+            # Reset file pointer for S3 upload
+            uploaded_file.seek(0)
+
+            # =========================================
+            # STEP 5: UPLOAD TO S3
+            # =========================================
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+                region_name=settings.AWS_S3_REGION_NAME
+            )
+
+            s3_client.upload_fileobj(
+                uploaded_file,
+                settings.AWS_STORAGE_BUCKET_NAME,
+                s3_key,
+                ExtraArgs={'ContentType': detected_file_type}
+            )
+
+            # =========================================
+            # STEP 6: SAVE TO DATABASE
+            # =========================================
+            file_record = UploadedFile.objects.create(
+                user=request.user,
+                file_name=uploaded_file.name,
+                file_size=uploaded_file.size,
+                s3_key=s3_key,
+                file_type=detected_file_type,  # store REAL type
+                classification=classification,
+                classification_confidence=confidence,
+                classification_patterns=json.dumps(matched_patterns[:5]),
+                classified_at=timezone.now(),
+                malware_scan_status='CLEAN' if is_safe else 'INFECTED',
+                malware_scan_date=timezone.now(),
+                virus_name=scan_result if not is_safe else None
+            )
+
+            messages.success(
+                request,
+                f"✅ File '{uploaded_file.name}' uploaded successfully! "
+                f"Type: {detected_file_type} | "
+                f"Classification: {classification} | "
+                f"Malware: {scan_result}"
+            )
+
+            return redirect('file_list')
+
+        except ClientError as e:
+            logger.error(f"S3 upload error: {e}")
+            messages.error(request, "Failed to upload file to cloud storage.")
+            return redirect('upload_file')
+
+        except Exception as e:
+            logger.error(f"Upload error: {e}")
+            messages.error(request, f"An error occurred: {str(e)}")
+            return redirect('upload_file')
+
+
+'''
+## What Changed
+    The upload pipeline is now 6 steps instead of 5:
+    ```
+    Browser upload
+        ↓
+    STEP 2 (NEW): python-magic checks real file type
+        → Blocks .exe, .dll, .sh, .jar etc. even if renamed to .pdf
+        ↓
+    STEP 3: ClamAV malware scan
+        → Blocks known malware signatures
+        ↓
+    STEP 4: OCR classification
+        ↓
+    STEP 5: S3 upload (uses real MIME type, not browser-reported)
+        ↓
+    STEP 6: Save to DB (stores real file type)
+'''
+

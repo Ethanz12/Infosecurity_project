@@ -4,19 +4,20 @@
 {% block content %}
 
 <div class="profile-hero">
-    <h1>Welcome, <span>{{ user.get_full_name|default:user.username }}</span></h1>
-    <p>Manage your profile details securely.</p>
+    <div class="hero-content">
+        <h1>Welcome, <span>{{ user.get_full_name|default:user.username }}</span></h1>
+        <p>Manage your personal and medical records securely.</p>
+    </div>
 </div>
 
 <div class="profile-container">
     <div class="profile-card">
-        <h2>Your Information</h2>
-
+        
         {# ===== GLOBAL MESSAGES ===== #}
         {% if messages %}
             {% for message in messages %}
                 <div class="alert alert-{{ message.tags }}">
-                    {{ message }}
+                    <i class="fas fa-info-circle"></i> {{ message }}
                 </div>
             {% endfor %}
         {% endif %}
@@ -24,7 +25,9 @@
         <form method="POST" novalidate>
             {% csrf_token %}
 
-            <h3 class="section-title">Personal Details</h3>
+            <div class="section-header">
+                <h3 class="section-title"><i class="fas fa-user-circle"></i> Personal Details</h3>
+            </div>
 
             <div class="mb-3">
                 <label class="form-label">Full Name</label>
@@ -38,7 +41,7 @@
             </div>
 
             <div class="mb-3">
-                <label class="form-label">Email</label>
+                <label class="form-label">Email Address</label>
                 <input type="email"
                        class="form-input {% if errors.email %}input-error{% endif %}"
                        name="email"
@@ -48,30 +51,31 @@
                 {% endif %}
             </div>
 
-            <div class="mb-3">
-                <label class="form-label">NRIC</label>
-                <input type="text"
-                       class="form-input {% if errors.nric %}input-error{% endif %}"
-                       name="nric"
-                       value="{% if form_data.nric %}{{ form_data.nric }}{% else %}{{ masked_nric }}{% endif %}">
-                {% if errors.nric %}
-                    <div class="error-text">{{ errors.nric }}</div>
-                {% endif %}
+            <div class="row">
+                <div class="col-half">
+                    <label class="form-label">NRIC (ID)</label>
+                    <input type="text"
+                           class="form-input {% if errors.nric %}input-error{% endif %}"
+                           name="nric"
+                           value="{% if form_data.nric %}{{ form_data.nric }}{% else %}{{ masked_nric }}{% endif %}">
+                    {% if errors.nric %}
+                        <div class="error-text">{{ errors.nric }}</div>
+                    {% endif %}
+                </div>
+                <div class="col-half">
+                    <label class="form-label">Phone Number</label>
+                    <input type="text"
+                           class="form-input {% if errors.phone %}input-error{% endif %}"
+                           name="phone"
+                           value="{% if form_data.phone %}{{ form_data.phone }}{% else %}{{ masked_phone }}{% endif %}">
+                    {% if errors.phone %}
+                        <div class="error-text">{{ errors.phone }}</div>
+                    {% endif %}
+                </div>
             </div>
 
             <div class="mb-3">
-                <label class="form-label">Phone</label>
-                <input type="text"
-                       class="form-input {% if errors.phone %}input-error{% endif %}"
-                       name="phone"
-                       value="{% if form_data.phone %}{{ form_data.phone }}{% else %}{{ masked_phone }}{% endif %}">
-                {% if errors.phone %}
-                    <div class="error-text">{{ errors.phone }}</div>
-                {% endif %}
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">Address</label>
+                <label class="form-label">Residential Address</label>
                 <textarea class="form-input {% if errors.address %}input-error{% endif %}"
                           name="address"
                           rows="3">{{ form_data.address }}</textarea>
@@ -82,7 +86,12 @@
 
             <hr class="divider">
 
-            <h3 class="section-title" style="color: #C8102E;">Medical Information</h3>
+            <div class="section-header">
+                <h3 class="section-title text-danger">
+                    <i class="fas fa-notes-medical"></i> Medical Information
+                </h3>
+               
+            </div>
 
             <div class="mb-3">
                 <label class="form-label">Blood Type</label>
@@ -95,111 +104,217 @@
 
             <div class="mb-3">
                 <label class="form-label">
-                    Dental Information 
-                   
+                    Dental Records 
+                    <span class="status-badge read-only">Read Only</span>
                 </label>
-                <p class="small-text">
-            
+                
+                <div class="read-only-box">
+                    {% if dental_info_display %}
+                        {{ dental_info_display|linebreaks }}
+                    {% else %}
+                        <span class="text-muted">No dental records found on file.</span>
+                    {% endif %}
+                </div>
+                <p class="small-text mt-2">
+                    <i class="fas fa-shield-alt"></i> 
+                     This information can only be modified by authorized Health Department staff. Your Information will appear after you visit once.
                 </p>
-                <textarea class="form-input"
-                          name="dental_stuff"
-                          rows="3"
-                          placeholder="Enter dental records or history here...">{{ form_data.dental_stuff|default:'' }}</textarea>
             </div>
 
             <div class="form-actions mt-4">
-                <button type="submit" class="btn-primary">Save Profile</button>
-                <a href="{% url 'home' %}" class="btn-secondary">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
+                <a href="{% url 'home' %}" class="btn btn-secondary">
+                    <i class="fas fa-times"></i> Cancel
+                </a>
             </div>
         </form>
     </div>
 </div>
 
 <style>
-/* Existing Styles */
+/* --- Layout & Hero --- */
 .profile-hero {
-    text-align: center;
-    padding: 60px 20px;
-    background-color: #0A2342;
+    background-color: #0A2342; /* Deep Navy Blue */
     color: white;
-    border-radius: 12px;
-    margin-bottom: 40px;
+    padding: 3rem 1rem;
+    text-align: center;
+    margin-bottom: -3rem; /* Overlap effect */
+    border-radius: 0 0 8px 8px;
 }
-.profile-hero span { color: #C8102E; }
-.profile-container { display: flex; justify-content: center; }
+.hero-content h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+.hero-content span { color: #C8102E; } /* Official Red Accent */
+
+.profile-container {
+    display: flex;
+    justify-content: center;
+    padding: 0 1rem 3rem 1rem;
+}
+
 .profile-card {
-    background-color: #f8f9fa;
-    padding: 30px;
-    border-radius: 12px;
+    background: white;
     width: 100%;
-    max-width: 500px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    max-width: 650px;
+    padding: 2.5rem;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+    position: relative; /* For overlap z-index */
 }
-.form-label { font-weight: bold; margin-bottom: 6px; display: block; }
+
+/* --- Form Elements --- */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
+.section-title {
+    font-size: 1.25rem;
+    color: #0A2342;
+    margin: 0;
+    font-weight: 600;
+}
+.section-title i { margin-right: 8px; }
+.text-danger { color: #C8102E !important; }
+
+.form-label {
+    display: block;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+}
 .form-input {
     width: 100%;
-    padding: 12px;
+    padding: 0.75rem;
+    border: 1px solid #ced4da;
     border-radius: 6px;
-    border: 1px solid #ccc;
-    margin-bottom: 6px;
+    font-size: 1rem;
+    transition: border-color 0.15s ease-in-out;
 }
-.input-error { border-color: #C8102E; background-color: #fff5f5; }
-.error-text { color: #C8102E; font-size: 0.85rem; margin-bottom: 10px; }
-.alert { padding: 12px; border-radius: 6px; margin-bottom: 20px; }
-.alert-error { background-color: #ffe5e5; color: #a30000; }
-.alert-success { background-color: #e6f7e6; color: #1e7e34; }
-.form-actions { display: flex; gap: 12px; }
-.btn-primary {
-    flex: 1;
-    background-color: #C8102E;
-    color: white;
-    padding: 12px;
-    border: none;
+.form-input:focus {
+    border-color: #0A2342;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(10, 35, 66, 0.1);
+}
+
+/* --- Read Only Box --- */
+.read-only-box {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-left: 4px solid #6c757d;
+    padding: 1rem;
+    border-radius: 4px;
+    color: #212529;
+    font-family: 'Courier New', monospace; /* Monospace for data look */
+    min-height: 60px;
+}
+.text-muted { color: #6c757d; font-style: italic; }
+
+/* --- Badges --- */
+.badge-secure {
+    background-color: #fff3cd;
+    color: #856404;
+    font-size: 0.75rem;
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-weight: 700;
+    border: 1px solid #ffeeba;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.status-badge {
+    display: inline-block;
+    padding: 0.25em 0.6em;
+    font-size: 75%;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: baseline;
+    border-radius: 0.25rem;
+    margin-left: 8px;
+}
+.read-only {
+    color: #fff;
+    background-color: #6c757d;
+}
+
+/* --- Layout Utils --- */
+.row {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 1rem;
+}
+.col-half { flex: 1; }
+.divider { margin: 2rem 0; border-top: 1px solid #eee; }
+.small-text { font-size: 0.85rem; color: #6c757d; }
+
+/* --- Buttons --- */
+.form-actions {
+    display: flex;
+    gap: 15px;
+    margin-top: 2rem;
+}
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
     border-radius: 6px;
     cursor: pointer;
     text-decoration: none;
-    text-align: center;
+    transition: all 0.2s;
+    border: none;
+    gap: 8px;
 }
+.btn-primary {
+    background-color: #C8102E;
+    color: white;
+    flex: 2;
+}
+.btn-primary:hover { background-color: #a00c24; }
 .btn-secondary {
+    background-color: white;
+    border: 2px solid #dee2e6;
+    color: #495057;
     flex: 1;
-    border: 2px solid #C8102E;
-    color: #C8102E;
-    padding: 12px;
-    text-align: center;
-    border-radius: 6px;
-    text-decoration: none;
+}
+.btn-secondary:hover {
+    background-color: #e9ecef;
+    border-color: #ced4da;
+    color: #212529;
 }
 
-/* NEW STYLES Added for this update */
-.section-title {
-    font-size: 1.2rem;
-    color: #0A2342;
-    margin-bottom: 15px;
-    border-bottom: 2px solid #eee;
-    padding-bottom: 5px;
+/* --- Alerts --- */
+.alert {
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    border-radius: 6px;
+    font-weight: 500;
 }
-.divider {
-    border: 0;
-    height: 1px;
-    background: #ccc;
-    margin: 30px 0;
+.alert-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+.alert-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+.input-error { border-color: #dc3545; background-color: #fff8f8; }
+.error-text { color: #dc3545; font-size: 0.875rem; margin-top: 0.25rem; }
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+    .row { flex-direction: column; gap: 0; }
+    .col-half { margin-bottom: 1rem; }
 }
-.lock-icon {
-    font-size: 0.8rem;
-    background-color: #e9ecef;
-    padding: 2px 6px;
-    border-radius: 4px;
-    color: #495057;
-    margin-left: 8px;
-    font-weight: normal;
-}
-.small-text {
-    font-size: 0.8rem;
-    color: #6c757d;
-    margin-bottom: 8px;
-    margin-top: -4px;
-}
-.mt-4 { margin-top: 1.5rem; }
 </style>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 
 {% endblock %}
