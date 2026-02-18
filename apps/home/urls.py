@@ -11,6 +11,7 @@ urlpatterns = [
     path('profile/', views.profile_view, name='profile'),
     path('upload/', views.upload_file, name='upload_file'),
     path('files/', views.file_list, name='file_list'),
+    path('view/<int:file_id>/', views.view_file, name='view_file'),  # NEW
     path('download/<int:file_id>/', views.download_file, name='download_file'),
     path('tickets/', views.ticket_list, name='ticket_list'),
     path('tickets/create/', views.create_ticket, name='create_ticket'),
