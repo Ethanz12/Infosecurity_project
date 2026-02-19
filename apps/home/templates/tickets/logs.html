@@ -1,43 +1,148 @@
 {% extends 'home/base.html' %}
 
+{% block title %}Audit Logs - SecureGov{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-    <h2>System Access Logs</h2>
-    <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>Time</th>
-                <th>User</th>
-                <th>Ticket ID</th>
-                <th>Action</th>
-                <th>Details</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for log in logs %}
-            <tr>
-                <td>{{ log.timestamp|date:"Y-m-d H:i:s" }}</td>
-                <td>{{ log.user.username }}</td>
-                <td>
-                    <a href="{% url 'ticket_detail' log.ticket.id %}">#{{ log.ticket.id }}</a>
-                </td>
-                <td>
-                    {% if log.action == "UNAUTHORIZED_ACCESS" %}
-                        <span class="badge bg-danger">{{ log.action }}</span>
-                    {% elif log.action == "UPDATE" %}
-                        <span class="badge bg-primary">{{ log.action }}</span>
-                    {% else %}
-                        <span class="badge bg-secondary">{{ log.action }}</span>
-                    {% endif %}
-                </td>
-                <td>{{ log.details }}</td>
-            </tr>
-            {% empty %}
-            <tr>
-                <td colspan="5">No logs found.</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+
+<div class="logs-hero">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="fw-bold"><i class="fas fa-history me-2"></i> System Audit Logs</h1>
+                <p class="text-white-50 mb-0">
+                    Track all access attempts and modifications for security compliance.
+                </p>
+            </div>
+            <a href="{% url 'staff_page' %}" class="btn btn-outline-light btn-sm px-3 rounded-pill">
+                <i class="fas fa-arrow-left me-1"></i> Staff Portal
+            </a>
+        </div>
+    </div>
 </div>
+
+<div class="container logs-container">
+    <div class="card shadow-lg border-0 rounded-3">
+        
+        <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold text-secondary">
+                <i class="fas fa-list-ul me-2"></i> Access History
+            </h5>
+            <span class="badge bg-light text-muted border">
+                Total Records: {{ logs|length }}
+            </span>
+        </div>
+
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light text-uppercase small text-muted">
+                        <tr>
+                            <th class="ps-4 py-3">Timestamp</th>
+                            <th>User</th>
+                            <th>Ticket Ref</th>
+                            <th>Action</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in logs %}
+                        <tr>
+                            <td class="ps-4 text-muted small" style="white-space: nowrap;">
+                                <i class="far fa-clock me-1"></i> {{ log.timestamp|date:"Y-m-d H:i:s" }}
+                            </td>
+
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="avatar-mini bg-light text-primary me-2">
+                                        {{ log.user.username|slice:":1"|upper }}
+                                    </div>
+                                    <span class="fw-bold text-dark small">{{ log.user.username }}</span>
+                                </div>
+                            </td>
+
+                            <td>
+                                {% if log.ticket %}
+                                    <a href="{% url 'ticket_detail' log.ticket.id %}" class="badge bg-light text-primary border text-decoration-none">
+                                        #{{ log.ticket.id|stringformat:"s"|slice:":8" }}
+                                    </a>
+                                {% else %}
+                                    <span class="text-muted small">-</span>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {% if log.action == "UNAUTHORIZED_ACCESS" %}
+                                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger">
+                                        <i class="fas fa-ban me-1"></i> DENIED
+                                    </span>
+                                {% elif log.action == "UPDATE" %}
+                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary">
+                                        <i class="fas fa-pen me-1"></i> UPDATE
+                                    </span>
+                                {% elif log.action == "VIEW" %}
+                                    <span class="badge bg-info bg-opacity-10 text-info border border-info">
+                                        <i class="fas fa-eye me-1"></i> VIEW
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ log.action }}</span>
+                                {% endif %}
+                            </td>
+
+                            <td class="text-muted small pe-4">
+                                {{ log.details|truncatechars:50 }}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-5">
+                                <div class="text-muted opacity-50">
+                                    <i class="fas fa-clipboard-check fa-3x mb-3"></i>
+                                    <p>No activity logs found.</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="card-footer bg-light py-2 text-center small text-muted border-top-0">
+            End of logs
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Hero Section */
+    .logs-hero {
+        background: linear-gradient(135deg, #0A2342 0%, #163b65 100%);
+        color: white;
+        padding: 3rem 0 5rem 0; /* Extra padding for overlap */
+        margin-bottom: -3rem;
+    }
+
+    /* Container Positioning */
+    .logs-container {
+        max-width: 1100px;
+        margin: 0 auto 3rem auto;
+    }
+
+    /* Avatar Mini */
+    .avatar-mini {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        font-weight: bold;
+    }
+
+    /* Table Tweaks */
+    .table th { font-weight: 600; letter-spacing: 0.5px; }
+    .badge { font-weight: 600; }
+</style>
+
 {% endblock %}
