@@ -15,8 +15,8 @@ import uuid
 DEPARTMENTS = [
     ('HEALTH', 'Health (MOH)'),
     ('FINANCE', 'Finance (MOF/IRAS)'),
-    ('GENERAL', 'General / Municipal (Town Council)'),
-    ('HR', 'Human Resources'), 
+    ('GENERAL', 'General /Town Council'),
+    
 ]
 
 # --- CONFIGURATION: Access Levels (New Attribute) ---
@@ -166,11 +166,13 @@ class Ticket(models.Model):
         (2, 'Sensitive - Senior Staff Only'),
     ]
 
-    # --- NEW: Service Category Choices ---
+    # ---  Category Choices ---
     CATEGORY_CHOICES = [
         ('GENERAL', 'General Inquiry'),
         ('BLOOD', 'Blood Checkup'),
-        ('DENTAL', 'Dental Checkup'), # Restricted to EthanLim
+        ('DENTAL', 'Dental Checkup'),
+        ('TAX', 'Tax / Finance Inquiry'),
+        
     ]
 
     # Link to the Citizen who created it

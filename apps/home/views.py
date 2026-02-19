@@ -439,7 +439,26 @@ def create_ticket(request):
 
 @login_required
 def create_ticket(request):
+    # 1. Define the Dependency Map
+    dept_map = {
+        'HEALTH': [
+            ('BLOOD', 'Blood Checkup'),
+            ('DENTAL', 'Dental Checkup'),
+            ('GENERAL', 'General Inquiry')
+        ],
+        'FINANCE': [
+            ('TAX', 'Tax / Finance Inquiry'),
+            ('GENERAL', 'General Inquiry')
+        ],
+        'GENERAL': [
+            ('GENERAL', 'General Inquiry')
+            # Removed MUNICIPAL
+        ]
+        # Removed HR Key entirely
+    }
+
     if request.method == "POST":
+        # ... (Same POST logic as before) ...
         subject = request.POST.get("subject", "").strip()
         description = request.POST.get("description", "").strip()
         department = request.POST.get("department")
@@ -461,7 +480,7 @@ def create_ticket(request):
 
     return render(request, "tickets/create_ticket.html", {
         "departments": DEPARTMENTS,
-        "categories": Ticket.CATEGORY_CHOICES
+        "dept_map_json": json.dumps(dept_map)
     })
 
 @login_required

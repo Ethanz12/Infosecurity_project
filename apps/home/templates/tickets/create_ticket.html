@@ -1,45 +1,144 @@
-{% include 'home/base.html' %}
+{% extends 'home/base.html' %}
 
-<div class="container" style="max-width: 600px; margin-top: 50px;">
-    <h2>Create Support Ticket</h2>
-    <p class="text-muted">Describe your issue below. A government officer will review it shortly.</p>
-    
-    <form method="post" class="card p-4 shadow-sm">
-        {% csrf_token %}
+{% block title %}New Ticket - SecureGov{% endblock %}
 
-        <div class="mb-3">
-            <label for="department" class="form-label">Department</label>
-            <select name="department" id="department" class="form-select" required>
-                <option value="" selected disabled>-- Select Government Agency --</option>
-                {% for code, name in departments %}
-                    <option value="{{ code }}">{{ name }}</option>
-                {% endfor %}
-            </select>
-            <div class="form-text">This routes your request to the correct agency.</div>
-        </div>
+{% block content %}
 
-        <div class="mb-3">
-            <label for="category" class="form-label">Service Type (For Health Dept)</label>
-            <select name="category" id="category" class="form-select" required>
-                {% for code, label in categories %}
-                    <option value="{{ code }}">{{ label }}</option>
-                {% endfor %}
-            </select>
-            <div class="form-text text-danger">
-                
+<div class="ticket-hero">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="fw-bold"><i class="fas fa-plus-circle me-2"></i> Create Support Ticket</h1>
+                <p class="text-white-50 mb-0">
+                    Submit your inquiry securely. A government officer will review it shortly.
+                </p>
             </div>
         </div>
-        
-        <div class="mb-3">
-            <label for="subject" class="form-label">Subject</label>
-            <input type="text" name="subject" id="subject" class="form-control" placeholder="e.g. NRIC Renewal Issue" required>
-        </div>
-        
-        <div class="mb-3">
-            <label for="description" class="form-label">Description</label>
-            <textarea name="description" id="description" class="form-control" rows="5" placeholder="Please provide details..." required></textarea>
-        </div>
-        
-        <button type="submit" class="btn btn-primary w-100">Submit Ticket</button>
-    </form>
+    </div>
 </div>
+
+<div class="container ticket-container">
+    <div class="card shadow-lg border-0 rounded-3">
+        
+        <div class="card-header bg-white py-3 border-bottom">
+            <h5 class="mb-0 fw-bold text-primary">
+                <i class="fas fa-pen-alt me-2"></i> Ticket Details
+            </h5>
+        </div>
+
+        <div class="card-body p-4">
+            <form method="post">
+                {% csrf_token %}
+
+                <div class="mb-4">
+                    <label for="subject" class="form-label fw-bold text-dark">Subject</label>
+                    <input type="text" name="subject" id="subject" class="form-control" placeholder="Brief summary (e.g. NRIC Renewal Issue)" required>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-4">
+                        <label for="department" class="form-label fw-bold text-dark">Department</label>
+                        <select name="department" id="department" class="form-select" required onchange="updateCategories()">
+                            <option value="" selected disabled>-- Select Government Agency --</option>
+                            {% for code, name in departments %}
+                                <option value="{{ code }}">{{ name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text text-muted small">
+                            <i class="fas fa-info-circle me-1"></i> Routes your request to the correct agency.
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 mb-4">
+                        <label for="category" class="form-label fw-bold text-dark">Category</label>
+                        <select name="category" id="category" class="form-select" required disabled>
+                            <option value="" selected disabled>-- Select Department First --</option>
+                        </select>
+                        <div class="form-text text-muted small">
+                            Specific service type based on department.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label for="description" class="form-label fw-bold text-dark">Description</label>
+                    <textarea name="description" id="description" class="form-control" rows="6" placeholder="Please provide detailed information about your request..." required></textarea>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mt-2">
+                    <a href="{% url 'ticket_list' %}" class="btn btn-outline-secondary px-4">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary px-5 fw-bold shadow-sm">
+                        <i class="fas fa-paper-plane me-2"></i> Submit Ticket
+                    </button>
+                </div>
+
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 1. Get the mapping data sent from views.py
+    // Use 'default:{}' to prevent crashes if variable is missing
+    const deptMap = JSON.parse('{{ dept_map_json|default:"{}"|safe }}');
+
+    function updateCategories() {
+        const deptSelect = document.getElementById('department');
+        const catSelect = document.getElementById('category');
+        const selectedDept = deptSelect.value;
+
+        // 2. Clear existing options
+        catSelect.innerHTML = '<option value="" selected disabled>-- Select Category --</option>';
+
+        // 3. Check if valid department selected
+        if (selectedDept && deptMap[selectedDept]) {
+            const categories = deptMap[selectedDept];
+            
+            // 4. Populate new options from JSON
+            categories.forEach(cat => {
+                // cat structure is ['BLOOD', 'Blood Checkup']
+                const option = document.createElement('option');
+                option.value = cat[0];
+                option.textContent = cat[1];
+                catSelect.appendChild(option);
+            });
+
+            // Enable the dropdown
+            catSelect.disabled = false;
+        } else {
+            // Disable if no department
+            catSelect.disabled = true;
+            catSelect.innerHTML = '<option value="" selected disabled>-- Select Department First --</option>';
+        }
+    }
+</script>
+
+<style>
+    /* Hero Section */
+    .ticket-hero {
+        background: linear-gradient(135deg, #0A2342 0%, #163b65 100%);
+        color: white;
+        padding: 3rem 0 5rem 0; /* Large bottom padding for overlap */
+        margin-bottom: -3rem;   /* Pulls content up */
+    }
+
+    /* Container Positioning */
+    .ticket-container {
+        max-width: 800px;
+        margin: 0 auto 3rem auto;
+    }
+
+    /* Form Tweaks */
+    .form-control:focus, .form-select:focus {
+        border-color: #0A2342;
+        box-shadow: 0 0 0 0.2rem rgba(10, 35, 66, 0.15);
+    }
+    
+    label {
+        font-size: 0.95rem;
+    }
+</style>
+
+{% endblock %}

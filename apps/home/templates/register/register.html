@@ -1,96 +1,102 @@
-{% include 'home/base.html' %}
+{% extends 'home/base.html' %}
 
-<div class="container">
-    <h1>Register</h1>
-    <p>Create your SecureGov account below.</p>
+{% block title %}Register - SecureGov{% endblock %}
 
-    <form method="post" class="form-card">
-        {% csrf_token %}
+{% block content %}
 
-        <label for="username">Username</label>
-        <input type="text" id="username" name="username" placeholder="Enter username" required>
+<div class="auth-hero">
+    <div class="container text-center">
+        <h1 class="fw-bold text-white">Create Account</h1>
+        <p class="text-white-50">Join the secure government digital services platform.</p>
+    </div>
+</div>
 
-        <label for="email">Email</label>
-        <input type="email" id="email" name="email" placeholder="Enter email" required>
+<div class="container auth-container">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow-lg border-0 rounded-3">
+                <div class="card-body p-5">
+                    
+                    <h4 class="fw-bold text-primary mb-4 border-bottom pb-2">
+                        Registration Form
+                    </h4>
 
-        <label for="nric">NRIC (Identity Number)</label>
-        <input type="text" id="nric" name="nric" placeholder="e.g. S1234567A" required style="text-transform: uppercase;">
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-info small" role="alert">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    {% endif %}
 
-        <label for="password">Password</label>
-        <input type="password" id="password" name="password" placeholder="Enter password" required>
+                    <form method="post">
+                        {% csrf_token %}
 
-        <label for="password2">Confirm Password</label>
-        <input type="password" id="password2" name="password2" placeholder="Confirm password" required>
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label for="nric" class="form-label small fw-bold text-muted">NRIC (Identity No.)</label>
+                                <input type="text" id="nric" name="nric" class="form-control" placeholder="e.g. S1234567A" required style="text-transform: uppercase;">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="username" class="form-label small fw-bold text-muted">Username</label>
+                                <input type="text" id="username" name="username" class="form-control" placeholder="Choose a username" required>
+                            </div>
+                        </div>
 
-        <button type="submit" class="btn-primary">Register</button>
-    </form>
+                        <div class="mb-3">
+                            <label for="email" class="form-label small fw-bold text-muted">Email Address</label>
+                            <input type="email" id="email" name="email" class="form-control" placeholder="name@example.com" required>
+                        </div>
 
-    {% if messages %}
-    <ul class="messages">
-        {% for message in messages %}
-        <li>{{ message }}</li>
-        {% endfor %}
-    </ul>
-    {% endif %}
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <label for="password" class="form-label small fw-bold text-muted">Password</label>
+                                <input type="password" id="password" name="password" class="form-control" placeholder="Min 8 characters" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="password2" class="form-label small fw-bold text-muted">Confirm Password</label>
+                                <input type="password" id="password2" name="password2" class="form-control" placeholder="Re-enter password" required>
+                            </div>
+                        </div>
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary fw-bold py-2">
+                                Create Account
+                            </button>
+                        </div>
+
+                    </form>
+
+                    <div class="text-center mt-4 pt-3 border-top">
+                        <p class="small text-muted mb-0">Already have an account?</p>
+                        <a href="{% url 'login' %}" class="fw-bold text-decoration-none">Login here</a>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <style>
-/* Container */
-.container {
-    max-width: 500px;
-    margin: 50px auto;
-    padding: 20px;
-    border: 1px solid #ddd;
-    border-radius: 10px;
-    background-color: #f8f9fa;
-}
+    .auth-hero {
+        background-color: #0A2342;
+        padding: 3rem 0 5rem 0;
+        margin-bottom: -3rem;
+    }
 
-/* Form Styling */
-.form-card label {
-    display: block;
-    margin-bottom: 5px;
-    font-weight: bold;
-    color: #0A2342;
-}
+    .auth-container {
+        margin-bottom: 4rem;
+    }
 
-.form-card input {
-    width: 100%;
-    padding: 8px 10px;
-    margin-bottom: 15px;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    /* Ensure padding doesn't affect width */
-    box-sizing: border-box; 
-}
-
-/* Button */
-.btn-primary {
-    width: 100%;
-    padding: 10px;
-    background-color: #0A2342;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    font-size: 16px;
-    cursor: pointer;
-}
-
-.btn-primary:hover {
-    background-color: #08304d;
-}
-
-/* Messages */
-.messages {
-    list-style-type: none;
-    padding: 0;
-    margin-top: 15px;
-}
-
-.messages li {
-    background-color: #ffe0e0;
-    color: #a00;
-    padding: 8px;
-    border-radius: 5px;
-    margin-bottom: 5px;
-}
+    .btn-primary {
+        background-color: #0A2342;
+        border-color: #0A2342;
+    }
+    
+    .btn-primary:hover {
+        background-color: #08304d;
+    }
 </style>
+
+{% endblock %}
