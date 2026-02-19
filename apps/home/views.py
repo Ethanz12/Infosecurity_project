@@ -163,9 +163,17 @@ def profile_view(request):
                 request.user.save()
 
             profile.save()
+            # --- AUTO-BACKUP TO S3 ---
+            from .s3_user_backup import backup_user
+            backup_result = backup_user(request.user)
+            
+            if backup_result['success']:
+                logger.info(f"Profile backup to S3: {backup_result['s3_key']}")
+            else:
+                logger.warning(f"Profile backup failed: {backup_result['message']}")
+            
             messages.success(request, "Profile updated successfully.")
             return redirect("profile")
-
     # --- GET REQUEST ---
     else:
         initial_data = {
@@ -222,12 +230,20 @@ def update_medical_record(request, citizen_id):
             # Save the restricted data
             target_profile.dental_stuff = new_dental
             target_profile.save()
-            
+
             # Log the action (Good practice for medical records)
             logger.info(f"Medical Record Updated: Staff {request.user.username} updated Citizen {target_user.username}")
             
+            # --- AUTO-BACKUP MEDICAL RECORD UPDATE TO S3 ---
+            from .s3_user_backup import backup_user
+            backup_result = backup_user(target_user)
+            
+            if backup_result['success']:
+                logger.info(f"Medical record backup to S3: {backup_result['s3_key']}")
+            
             messages.success(request, f"Dental records updated for {target_user.username}")
-            return redirect("ticket_list") # Or wherever you want to redirect
+            return redirect("ticket_list")
+            
     else:
         form = MedicalStaffForm(initial={"dental_stuff": target_profile.dental_stuff})
 
@@ -320,6 +336,13 @@ def register_view(request):
                 profile, created = CitizenProfile.objects.get_or_create(user=user)
                 profile.set_nric(nric)
                 profile.save()
+
+                # --- AUTO-BACKUP NEW USER TO S3 ---
+                from .s3_user_backup import backup_user
+                backup_result = backup_user(user)
+                
+                if backup_result['success']:
+                    logger.info(f"New user backup to S3: {backup_result['s3_key']}")
 
             messages.success(request, "Account created successfully. Please login.")
             return redirect("login")
