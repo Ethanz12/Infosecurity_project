@@ -400,6 +400,8 @@ def logout_view(request):
     return redirect("home")
 
 
+
+
 @login_required
 def test_db_connection(request):
     try:
@@ -409,78 +411,134 @@ def test_db_connection(request):
     except Exception:
         return HttpResponse("Database connection failed", status=500)
     
+def handle_secure_upload(user, file_obj, ticket=None):
+    """
+    Scans, classifies, uploads to S3, and saves the file record.
+    Can be used by create_ticket AND upload_file views.
+    """
+    # Imports inside function to avoid circular dependency issues
+    import magic
+    from .malware_scanner import MalwareScanner
+    from .classification import OCRClassifier
+    
+    # STEP 1: Read content
+    file_content = file_obj.read()
+    
+    # STEP 2: Magic Type Detection
+    mime = magic.from_buffer(file_content, mime=True)
+    BLOCKED_MIME_TYPES = [
+        'application/x-dosexec', 'application/x-msdownload', 
+        'application/x-executable', 'text/x-shellscript', 'text/x-python'
+    ]
+    
+    if mime in BLOCKED_MIME_TYPES:
+        raise ValidationError(f"File blocked: Detected as dangerous type ({mime})")
 
+    # STEP 3: Malware Scan
+    is_safe, scan_result = MalwareScanner.scan_file(file_content)
+    if not is_safe:
+        raise ValidationError(f"File blocked: Malware detected ({scan_result})")
 
+    # STEP 4: OCR Classification
+    classification, confidence, matched_patterns = OCRClassifier.classify_with_ocr(
+        file_content, file_obj.name, mime
+    )
+    
+    # STEP 5: S3 Upload (Teammate's Bucket)
+    file_extension = file_obj.name.split('.')[-1]
+    unique_filename = f"{uuid.uuid4()}.{file_extension}"
+    s3_key = f"uploads/{user.username}/{unique_filename}"
+    
+    file_obj.seek(0) # Reset pointer
+    
+    s3_client = boto3.client(
+        's3',
+        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        region_name=settings.AWS_S3_REGION_NAME
+    )
+    
+    s3_client.upload_fileobj(
+        file_obj,
+        settings.AWS_STORAGE_BUCKET_NAME,
+        s3_key,
+        ExtraArgs={'ContentType': mime}
+    )
+    
+    # STEP 6: Save Record
+    return UploadedFile.objects.create(
+        user=user,
+        ticket=ticket, # Links to ticket if provided
+        file_name=file_obj.name,
+        file_size=file_obj.size,
+        s3_key=s3_key,
+        file_type=mime,
+        classification=classification,
+        classification_confidence=confidence,
+        classification_patterns=json.dumps(matched_patterns[:5]),
+        classified_at=timezone.now(),
+        malware_scan_status='CLEAN', # We only save clean files here
+        malware_scan_date=timezone.now()
+    )
 
+def process_ticket_submission(request):
+    """
+    Call function to handle ticket creation and optional secure file upload.
+    Returns: True if ticket created, False if validation failed.
+    """
+    subject = request.POST.get("subject", "").strip()
+    description = request.POST.get("description", "").strip()
 
+    # 1. Validate Form
+    if not subject or not description:
+        messages.error(request, "Subject and Description are required.")
+        return False
 
-#my ticket
-@login_required
-def create_ticket(request):
-    if request.method == "POST":
-        subject = request.POST.get("subject", "").strip()
-        description = request.POST.get("description", "").strip()
-        department = request.POST.get("department") # <--- NEW: Citizen picks department
+    # 2. Create Ticket
+    ticket = Ticket.objects.create(
+        citizen=request.user,
+        subject=subject,
+        description=description,
+        department=request.POST.get("department"),
+        category=request.POST.get("category")
+    )
 
-        if not subject or not description:
-            messages.error(request, "Subject and Description are required.")
-            return redirect("create_ticket")
-
-        Ticket.objects.create(
-            citizen=request.user,
-            subject=subject,
-            description=description,
-            department=department # <--- NEW: Save Attribute
-        )
+    # 3. Handle Attachment (if present)
+    if request.FILES.get('attachment'):
+        try:
+            handle_secure_upload(
+                user=request.user, 
+                file_obj=request.FILES['attachment'], 
+                ticket=ticket
+            )
+            messages.success(request, "Ticket created with verified attachment.")
+        except ValidationError as e:
+            # Ticket is safe, but file was blocked (virus/exe)
+            messages.warning(request, f"Ticket created, but attachment blocked: {e.message}")
+        except Exception as e:
+            logger.error(f"Upload error: {e}")
+            messages.warning(request, "Ticket created, but file upload failed.")
+    else:
         messages.success(request, "Ticket created successfully.")
-        return redirect("ticket_list")
 
-    # Pass DEPARTMENTS for dropdown
-    return render(request, "tickets/create_ticket.html", {"departments": DEPARTMENTS})
-
-
-# home/views.py
+    return True
 
 @login_required
 def create_ticket(request):
-    # 1. Define the Dependency Map
     dept_map = {
-        'HEALTH': [
-            ('BLOOD', 'Blood Checkup'),
-            ('DENTAL', 'Dental Checkup'),
-            ('GENERAL', 'General Inquiry')
-        ],
-        'FINANCE': [
-            ('TAX', 'Tax / Finance Inquiry'),
-            ('GENERAL', 'General Inquiry')
-        ],
-        'GENERAL': [
-            ('GENERAL', 'General Inquiry')
-            # Removed MUNICIPAL
-        ]
-        # Removed HR Key entirely
+        'HEALTH': [('BLOOD', 'Blood Checkup'), ('DENTAL', 'Dental Checkup'), ('GENERAL', 'General Inquiry')],
+        'FINANCE': [('TAX', 'Tax / Finance Inquiry'), ('GENERAL', 'General Inquiry')],
+        'GENERAL': [('GENERAL', 'General Inquiry')]
     }
 
     if request.method == "POST":
-        # ... (Same POST logic as before) ...
-        subject = request.POST.get("subject", "").strip()
-        description = request.POST.get("description", "").strip()
-        department = request.POST.get("department")
-        category = request.POST.get("category")
-
-        if not subject or not description:
-            messages.error(request, "Subject and Description are required.")
+        # USE THE HELPER FUNCTION HERE!
+        # This one line replaces all the complex logic you wrote above
+        if process_ticket_submission(request):
+            return redirect("ticket_list")
+        else:
+            # If validation failed, stay on the page
             return redirect("create_ticket")
-
-        Ticket.objects.create(
-            citizen=request.user,
-            subject=subject,
-            description=description,
-            department=department,
-            category=category
-        )
-        messages.success(request, "Ticket created successfully.")
-        return redirect("ticket_list")
 
     return render(request, "tickets/create_ticket.html", {
         "departments": DEPARTMENTS,
@@ -511,9 +569,8 @@ def ticket_list(request):
     return render(request, "tickets/ticket_list.html", {"tickets": tickets, "is_gov": is_gov})
 
 @login_required
-def ticket_detail(request, ticket_uuid): # Changed from ticket_id to ticket_uuid
+def ticket_detail(request, ticket_uuid):
     # 1. Fetch by UUID (Unguessable ID)
-    # This prevents 'IDOR Injection' by stopping ID enumeration attacks.
     ticket = get_object_or_404(Ticket, id=ticket_uuid)
     
     user = request.user
@@ -528,7 +585,7 @@ def ticket_detail(request, ticket_uuid): # Changed from ticket_id to ticket_uuid
     # --- B. Check Access Rights ---
     if is_owner:
         has_access = True
-        can_edit = False # Citizens cannot edit gov fields
+        can_edit = False 
         
     elif is_gov:
         if user.is_superuser:
@@ -538,29 +595,19 @@ def ticket_detail(request, ticket_uuid): # Changed from ticket_id to ticket_uuid
             try:
                 staff = StaffProfile.objects.get(user=user)
                 
-                # ===================================================
-                # 🦷 DENTAL TICKET LOGIC
-                # ===================================================
+                # Dental Category Logic
                 if ticket.category == 'DENTAL':
-                    # Rule 1: EthanLim has FULL access
                     if user.username == "EthanLim":
                         has_access = True
                         can_edit = True
-                    
-                    # Rule 2: Senior Health Staff (Level 2+) can VIEW ONLY
                     elif staff.department == 'HEALTH' and staff.security_level >= 2:
                         has_access = True
                         can_edit = False 
-                        
-                    # Rule 3: Everyone else BLOCKED
                     else:
                         has_access = False
                 
-                # ===================================================
-                #  STANDARD TICKET LOGIC
-                # ===================================================
+                # Standard Logic
                 else:
-                    # Strict Department & Clearance Check
                     if staff.department == ticket.department and staff.security_level >= ticket.min_clearance:
                         has_access = True
                         can_edit = True
@@ -570,17 +617,14 @@ def ticket_detail(request, ticket_uuid): # Changed from ticket_id to ticket_uuid
             except StaffProfile.DoesNotExist:
                 has_access = False
 
-    # --- C.  HANDLE ACCESS DENIED ---
+    # --- C. HANDLE ACCESS DENIED ---
     if not has_access:
-        # SECURITY TIP: Log the attempted IDOR
         TicketLog.objects.create(
             ticket=ticket,
             user=user,
             action="UNAUTHORIZED_ACCESS",
             details=f"IDOR Attempt: User {user.username} tried to access ticket {ticket.id}"
         )
-        # Use 404 instead of 403 to hide existence of the ticket from attackers
-        # or stick to 403 if you want to be explicit about permission denied.
         return render(request, 'home/noaccess.html', status=403)
 
     # --- D. ✅ HANDLE ACCESS GRANTED ---
@@ -624,16 +668,20 @@ def ticket_detail(request, ticket_uuid): # Changed from ticket_id to ticket_uuid
         messages.success(request, "Ticket updated.")
         return redirect("ticket_detail", ticket_uuid=ticket.id)
 
+    # --- NEW: Fetch Attachments ---
+    # This pulls all files linked to this ticket via the related_name='attachments'
+    attachments = ticket.attachments.all()
+
     # --- F. Prepare Data ---
     context = {
         "ticket": ticket,
+        "attachments": attachments, # <--- CRITICAL: Added this line
         "is_gov": is_gov,
         "can_edit": can_edit,
         "sensitivity_levels": Ticket.TICKET_SENSITIVITY,
         "logs": ticket.logs.all().order_by('-timestamp')
     }
 
-    # ... (Your existing context building logic for profile) ...
     if is_gov:
          try:
             profile = ticket.citizen.citizenprofile
@@ -643,6 +691,8 @@ def ticket_detail(request, ticket_uuid): # Changed from ticket_id to ticket_uuid
                 "phone": mask_phone(profile.get_phone()),
                 "blood_type": profile.blood_type,
             }
+            # ABAC check for displaying sensitive profile details within the ticket
+            staff = StaffProfile.objects.get(user=user)
             if user.username == "EthanLim":
                 citizen_info["dental_stuff"] = profile.dental_stuff
             elif staff.department == 'HEALTH' and staff.security_level >= 2:

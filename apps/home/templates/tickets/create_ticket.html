@@ -27,7 +27,7 @@
         </div>
 
         <div class="card-body p-4">
-            <form method="post">
+            <form method="post" enctype="multipart/form-data">
                 {% csrf_token %}
 
                 <div class="mb-4">
@@ -61,6 +61,14 @@
                 </div>
 
                 <div class="mb-4">
+                    <label for="attachment" class="form-label fw-bold text-dark">Attachment (Optional)</label>
+                    <input type="file" name="attachment" id="attachment" class="form-control">
+                    <div class="form-text text-muted small">
+                        <i class="fas fa-shield-alt me-1"></i> Files are scanned for malware and sensitive data before upload.
+                    </div>
+                </div>
+
+                <div class="mb-4">
                     <label for="description" class="form-label fw-bold text-dark">Description</label>
                     <textarea name="description" id="description" class="form-control" rows="6" placeholder="Please provide detailed information about your request..." required></textarea>
                 </div>
@@ -81,7 +89,6 @@
 
 <script>
     // 1. Get the mapping data sent from views.py
-    // Use 'default:{}' to prevent crashes if variable is missing
     const deptMap = JSON.parse('{{ dept_map_json|default:"{}"|safe }}');
 
     function updateCategories() {
@@ -98,7 +105,6 @@
             
             // 4. Populate new options from JSON
             categories.forEach(cat => {
-                // cat structure is ['BLOOD', 'Blood Checkup']
                 const option = document.createElement('option');
                 option.value = cat[0];
                 option.textContent = cat[1];

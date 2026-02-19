@@ -92,6 +92,7 @@ def save_citizen_profile(sender, instance, **kwargs):
 # ----------------------------
 
 class UploadedFile(models.Model):
+    
     CLASSIFICATION_CHOICES = [
         ('UNCLASSIFIED', 'Unclassified'),
         ('PUBLIC', 'Public'),
@@ -108,11 +109,13 @@ class UploadedFile(models.Model):
     ]
         
     user = models.ForeignKey(User, on_delete=models.CASCADE)
+    ticket = models.ForeignKey('Ticket', on_delete=models.SET_NULL, null=True, blank=True, related_name='attachments')
     file_name = models.CharField(max_length=255)
     file_size = models.IntegerField()  # in bytes
     s3_key = models.CharField(max_length=500)  # S3 path
     upload_date = models.DateTimeField(auto_now_add=True)
     file_type = models.CharField(max_length=100)
+    
     
     # Classification fields
     classification = models.CharField(
