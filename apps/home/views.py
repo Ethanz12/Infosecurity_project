@@ -871,6 +871,9 @@ def view_file(request, file_id):
 
 @login_required
 def upload_file(request):
+    if request.method == 'GET':
+        return render(request, 'home/upload.html')
+
     if request.method == 'POST' and request.FILES.get('file'):
         uploaded_file = request.FILES['file']
 
