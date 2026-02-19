@@ -28,7 +28,22 @@
         <tr>
             <td>{{ file.file_name }}</td>
             <td>{{ file.file_size|filesizeformat }}</td>
-            <td>{{ file.file_type }}</td>
+            <td class="file-type-cell">
+                {# Display friendly name instead of full MIME type #}
+                {% if 'pdf' in file.file_type.lower %}
+                <span class="badge bg-danger">PDF</span>
+                {% elif 'wordprocessingml' in file.file_type or 'msword' in file.file_type %}
+                <span class="badge bg-primary">Word</span>
+                {% elif 'spreadsheet' in file.file_type or 'excel' in file.file_type %}
+                <span class="badge bg-success">Excel</span>
+                {% elif 'image' in file.file_type %}
+                <span class="badge bg-info">Image</span>
+                {% elif 'text' in file.file_type %}
+                <span class="badge bg-secondary">Text</span>
+                {% else %}
+                <span class="badge bg-secondary">File</span>
+                {% endif %}
+            </td>
             <td>{{ file.upload_date|date:"Y-m-d H:i" }}</td>
             <td>
                 {% if file.classification %}
@@ -120,6 +135,21 @@
     font-size: 12px;
     display: inline-block;
 }
+
+.file-table {
+    table-layout: fixed; /* Forces column widths */
+}
+
+.file-type-cell {
+    text-align: center;
+}
+
+/* Bootstrap-style badge colors */
+.bg-primary { background-color: #0d6efd; }
+.bg-secondary { background-color: #6c757d; }
+.bg-success { background-color: #198754; }
+.bg-danger { background-color: #dc3545; }
+.bg-info { background-color: #0dcaf0; color: #000; }
 
 </style>
 {% endblock %}

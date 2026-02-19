@@ -42,6 +42,10 @@ import json
 # NEW IMPORTS FOR ABAC
 from .models import StaffProfile, DEPARTMENTS
 
+#Watermark Stuff
+from .watermark_utils import watermark_document
+from django.http import HttpResponse  
+
 logger = logging.getLogger(__name__)
 
 HARD_ROLES = ["Citizen", "GovernmentWorker"]
@@ -821,28 +825,65 @@ def file_list(request):
 
 @login_required
 def download_file(request, file_id):
-    """Generate presigned URL for downloading file"""
+    """Generate presigned URL or serve watermarked file for download"""
     try:
         file_record = UploadedFile.objects.get(id=file_id, user=request.user)
         
-        s3_client = boto3.client(
-            's3',
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_S3_REGION_NAME
-        )
+        # Check if file needs watermarking
+        should_watermark = file_record.classification in ['CONFIDENTIAL', 'SENSITIVE', 'INTERNAL']
+        
+        if should_watermark:
+            # Download file from S3, add watermark, and serve directly
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+                region_name=settings.AWS_S3_REGION_NAME
+            )
+            
+            # Download original file from S3
+            response = s3_client.get_object(
+                Bucket=settings.AWS_STORAGE_BUCKET_NAME,
+                Key=file_record.s3_key
+            )
+            file_content = response['Body'].read()
+            
+            # Apply watermark
+            watermarked_content = watermark_document(
+                file_content,
+                file_record.file_name,
+                file_record.file_type,
+                file_record.classification
+            )
+            
+            # Serve watermarked file directly
+            response = HttpResponse(watermarked_content, content_type=file_record.file_type)
+            response['Content-Disposition'] = f'attachment; filename="{file_record.file_name}"'
+            
+            logger.info(f"User {request.user.username} downloaded watermarked file {file_record.file_name}")
+            return response
+        
+        else:
+            # No watermark needed - use presigned URL (faster)
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+                region_name=settings.AWS_S3_REGION_NAME
+            )
 
-        # Generate presigned URL for download (forces file download)
-        download_url = s3_client.generate_presigned_url(
-            'get_object',
-            Params={
-                'Bucket': settings.AWS_STORAGE_BUCKET_NAME,
-                'Key': file_record.s3_key,
-                'ResponseContentDisposition': f'attachment; filename="{file_record.file_name}"'
-            },
-            ExpiresIn=3600  # 1 hour
-        )
-        return redirect(download_url)
+            download_url = s3_client.generate_presigned_url(
+                'get_object',
+                Params={
+                    'Bucket': settings.AWS_STORAGE_BUCKET_NAME,
+                    'Key': file_record.s3_key,
+                    'ResponseContentDisposition': f'attachment; filename="{file_record.file_name}"'
+                },
+                ExpiresIn=3600
+            )
+            
+            logger.info(f"User {request.user.username} downloaded file {file_record.file_name}")
+            return redirect(download_url)
     
     except UploadedFile.DoesNotExist:
         messages.error(request, "File not found.")
@@ -854,28 +895,65 @@ def download_file(request, file_id):
     
 @login_required
 def view_file(request, file_id):
-    """Generate presigned URL for viewing file in browser"""
+    """Generate presigned URL or serve watermarked file for viewing"""
     try:
         file_record = UploadedFile.objects.get(id=file_id, user=request.user)
         
-        s3_client = boto3.client(
-            's3',
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_S3_REGION_NAME
-        )
+        # Check if file needs watermarking
+        should_watermark = file_record.classification in ['CONFIDENTIAL', 'SENSITIVE', 'INTERNAL']
+        
+        if should_watermark:
+            # Download file from S3, add watermark, and serve directly
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+                region_name=settings.AWS_S3_REGION_NAME
+            )
+            
+            # Download original file from S3
+            response = s3_client.get_object(
+                Bucket=settings.AWS_STORAGE_BUCKET_NAME,
+                Key=file_record.s3_key
+            )
+            file_content = response['Body'].read()
+            
+            # Apply watermark
+            watermarked_content = watermark_document(
+                file_content,
+                file_record.file_name,
+                file_record.file_type,
+                file_record.classification
+            )
+            
+            # Serve watermarked file directly for viewing
+            response = HttpResponse(watermarked_content, content_type=file_record.file_type)
+            response['Content-Disposition'] = f'inline; filename="{file_record.file_name}"'
+            
+            logger.info(f"User {request.user.username} viewed watermarked file {file_record.file_name}")
+            return response
+        
+        else:
+            # No watermark needed - use presigned URL (faster)
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+                region_name=settings.AWS_S3_REGION_NAME
+            )
 
-        # Generate presigned URL for inline viewing
-        view_url = s3_client.generate_presigned_url(
-            'get_object',
-            Params={
-                'Bucket': settings.AWS_STORAGE_BUCKET_NAME,
-                'Key': file_record.s3_key,
-                'ResponseContentDisposition': 'inline'  # View in browser
-            },
-            ExpiresIn=3600  # 1 hour
-        )
-        return redirect(view_url)
+            view_url = s3_client.generate_presigned_url(
+                'get_object',
+                Params={
+                    'Bucket': settings.AWS_STORAGE_BUCKET_NAME,
+                    'Key': file_record.s3_key,
+                    'ResponseContentDisposition': 'inline'
+                },
+                ExpiresIn=3600
+            )
+            
+            logger.info(f"User {request.user.username} viewed file {file_record.file_name}")
+            return redirect(view_url)
     
     except UploadedFile.DoesNotExist:
         messages.error(request, "File not found.")
