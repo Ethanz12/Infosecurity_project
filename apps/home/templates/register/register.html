@@ -7,7 +7,7 @@
 <div class="auth-hero">
     <div class="container text-center">
         <h1 class="fw-bold text-white">Create Account</h1>
-        <p class="text-white-50">Join the secure government digital services platform.</p>
+        <p class="text-white-50">Join the GOV digital services platform.</p>
     </div>
 </div>
 
@@ -32,16 +32,16 @@
                     <form method="post">
                         {% csrf_token %}
 
-                        <div class="row g-3 mb-3">
-                            <div class="col-md-6">
-                                <label for="nric" class="form-label small fw-bold text-muted">NRIC (Identity No.)</label>
-                                <input type="text" id="nric" name="nric" class="form-control" placeholder="e.g. S1234567A" required style="text-transform: uppercase;">
-                            </div>
-                            <div class="col-md-6">
-                                <label for="username" class="form-label small fw-bold text-muted">Username</label>
-                                <input type="text" id="username" name="username" class="form-control" placeholder="Choose a username" required>
-                            </div>
-                        </div>
+                      <div class="row g-3 mb-3">
+        <div class="col-md-6">
+        <label for="nric" class="form-label small fw-bold text-muted">NRIC (Identity No.)</label>
+        <input type="text" id="nric" name="nric" class="form-control" placeholder="e.g. S*******A" required style="text-transform: uppercase;">
+        </div>
+        <div class="col-md-6">
+        <label for="username" class="form-label small fw-bold text-muted">Username</label>
+        <input type="text" id="username" name="username" class="form-control" placeholder="Choose a username" required>
+        </div>
+        </div>
 
                         <div class="mb-3">
                             <label for="email" class="form-label small fw-bold text-muted">Email Address</label>

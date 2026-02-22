@@ -83,18 +83,19 @@ except LookupError as e:
     print(f'❌ CRITICAL ERROR: Could not find StaffProfile model. Error: {e}')
     exit(1)
 
+# UPDATED: Added specialization to the config mapping
 config = [
-    ('HEALTH_USER', 'HEALTH_PASS', 'HEALTH', 1),
-    ('FINANCE_USER', 'FINANCE_PASS', 'FINANCE', 2),
-    ('GENERAL_USER', 'GENERAL_PASS', 'GENERAL', 1),
-    ('HEALTH_USER1', 'HEALTH_PASS1', 'HEALTH', 2),
-    ('HEALTH_USER2', 'HEALTH_PASS2', 'HEALTH', 2)
+    ('HEALTH_USER', 'HEALTH_PASS', 'HEALTH', 1, 'GENERAL'),
+    ('FINANCE_USER', 'FINANCE_PASS', 'FINANCE', 2, 'ACCOUNTANT'),
+    ('GENERAL_USER', 'GENERAL_PASS', 'GENERAL', 1, 'GENERAL'),
+    ('HEALTH_USER1', 'HEALTH_PASS1', 'HEALTH', 2, 'DENTIST'),
+    ('HEALTH_USER2', 'HEALTH_PASS2', 'HEALTH', 2, 'SURGEON')
 ]
 
 gov_group = Group.objects.get(name='GovernmentWorker')
 
 print('--- Configuring Staff Accounts ---')
-for u_var, p_var, dept, lvl in config:
+for u_var, p_var, dept, lvl, spec in config:
     username = os.getenv(u_var)
     password = os.getenv(p_var)
 
@@ -109,13 +110,14 @@ for u_var, p_var, dept, lvl in config:
     user.groups.add(gov_group)
     user.save()
 
+    # UPDATED: Mapping the 'spec' variable to the 'specialization' attribute
     StaffProfile.objects.update_or_create(
         user=user,
-        defaults={'department': dept, 'security_level': lvl}
+        defaults={'department': dept, 'security_level': lvl, 'specialization': spec}
     )
 
     status = 'Created' if created else 'Updated'
-    print(f'✅ {status}: {username} -> {dept} (Lvl {lvl})')
+    print(f'✅ {status}: {username} -> {dept} (Lvl {lvl}) [{spec}]')
 
 # 6️⃣ Test Chat Models (Create → Verify → Cleanup)
 try:

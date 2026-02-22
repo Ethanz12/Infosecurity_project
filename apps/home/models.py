@@ -4,7 +4,6 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from security.crypto import encrypt, decrypt 
 
-
 from django.utils import timezone
 from datetime import timedelta
 import random
@@ -16,14 +15,22 @@ DEPARTMENTS = [
     ('HEALTH', 'Health (MOH)'),
     ('FINANCE', 'Finance (MOF/IRAS)'),
     ('GENERAL', 'General /Town Council'),
-    
 ]
 
-# --- CONFIGURATION: Access Levels (New Attribute) ---
+# --- CONFIGURATION: Access Levels (ABAC Attributes) ---
 ACCESS_LEVELS = [
     (1, 'Junior Officer'),
     (2, 'Senior Manager'),
     (3, 'Director'), 
+]
+
+# --- CONFIGURATION: Specializations (NEW ABAC Attribute) ---
+SPECIALIZATIONS = [
+    ('GENERAL', 'General Operations'),
+    ('DENTIST', 'Dentistry'),
+    ('SURGEON', 'Surgery'),
+    ('ACCOUNTANT', 'Accounting'),
+    ('NONE', 'Not Applicable'),
 ]
 
 # ----------------------------
@@ -43,7 +50,7 @@ class CitizenProfile(models.Model):
     blood_type = models.CharField(max_length=5, blank=True, null=True)
 
     # 2. Dental Stuff: RESTRICTED
-    # Logic in views.py ensures ONLY 'EthanLim' sees this.
+    # Viewable ONLY by Health Dept staff with the 'DENTIST' specialization.
     dental_stuff = models.TextField(blank=True, null=True)
 
     two_factor_enabled = models.BooleanField(default=False)
@@ -88,7 +95,7 @@ def save_citizen_profile(sender, instance, **kwargs):
 
 
 # ----------------------------
-# UploadedFile (Unchanged)
+# UploadedFile
 # ----------------------------
 
 class UploadedFile(models.Model):
@@ -116,7 +123,6 @@ class UploadedFile(models.Model):
     upload_date = models.DateTimeField(auto_now_add=True)
     file_type = models.CharField(max_length=100)
     
-    
     # Classification fields
     classification = models.CharField(
         max_length=50, 
@@ -134,10 +140,10 @@ class UploadedFile(models.Model):
     virus_name = models.CharField(max_length=200, blank=True, null=True)
     
     def __str__(self):
-            return f"{self.file_name} - {self.user.username} [{self.classification}]"
+        return f"{self.file_name} - {self.user.username} [{self.classification}]"
     
     class Meta:
-            ordering = ['-upload_date']
+        ordering = ['-upload_date']
 
     def get_classification_badge_color(self):
         """Return color for classification badge"""
@@ -152,7 +158,7 @@ class UploadedFile(models.Model):
 
 
 # ----------------------------
-# Ticket System (Updated with Categories)
+# Ticket System
 # ----------------------------
 
 class Ticket(models.Model):
@@ -169,19 +175,15 @@ class Ticket(models.Model):
         (2, 'Sensitive - Senior Staff Only'),
     ]
 
-    # ---  Category Choices ---
     CATEGORY_CHOICES = [
         ('GENERAL', 'General Inquiry'),
         ('BLOOD', 'Blood Checkup'),
         ('DENTAL', 'Dental Checkup'),
         ('TAX', 'Tax / Finance Inquiry'),
-        
     ]
 
-    # Link to the Citizen who created it
     citizen = models.ForeignKey(User, on_delete=models.CASCADE, related_name="tickets")
     
-    # Ticket Details
     subject = models.CharField(max_length=200)
     description = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='OPEN')
@@ -194,7 +196,7 @@ class Ticket(models.Model):
         help_text="The government department this ticket belongs to."
     )
 
-    # --- NEW ATTRIBUTE: Service Category ---
+    # --- ATTRIBUTE 2: Service Category ---
     category = models.CharField(
         max_length=20, 
         choices=CATEGORY_CHOICES, 
@@ -209,14 +211,11 @@ class Ticket(models.Model):
         help_text="Minimum clearance level required to view this ticket."
     )
     
-    # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # Government Worker Response
     gov_response = models.TextField(blank=True, null=True)
     
-    # Optional: Link to a specific Gov Worker if they "claim" the ticket
     assigned_to = models.ForeignKey(
         User, 
         on_delete=models.SET_NULL, 
@@ -230,7 +229,7 @@ class Ticket(models.Model):
 
 
 # ----------------------------
-# Staff Profile (Unchanged)
+# Staff Profile
 # ----------------------------
 
 class StaffProfile(models.Model):
@@ -246,8 +245,16 @@ class StaffProfile(models.Model):
         help_text="1 = Junior, 2 = Senior, 3 = Director"
     )
 
+    # NEW ATTRIBUTE 3: Job Specialization
+    specialization = models.CharField(
+        max_length=50, 
+        choices=SPECIALIZATIONS, 
+        default='NONE',
+        help_text="Specific job role or expertise area."
+    )
+
     def __str__(self):
-        return f"{self.user.username} | {self.get_department_display()} | Lvl {self.security_level}"
+        return f"{self.user.username} | {self.get_department_display()} | Lvl {self.security_level} | {self.get_specialization_display()}"
     
 class TwoFactorCode(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -258,12 +265,10 @@ class TwoFactorCode(models.Model):
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     
     def is_valid(self):
-        """Check if code is still valid"""
         return not self.is_used and timezone.now() < self.expires_at
     
     @staticmethod
     def generate_code():
-        """Generate random 6-digit code"""
         return ''.join(random.choices(string.digits, k=6))
     
     def __str__(self):
@@ -272,8 +277,8 @@ class TwoFactorCode(models.Model):
 class TicketLog(models.Model):
     ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name='logs')
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
-    action = models.CharField(max_length=50)  # e.g., "VIEW", "UPDATE"
-    details = models.TextField(blank=True)    # e.g., "Changed status to Resolved"
+    action = models.CharField(max_length=50)  
+    details = models.TextField(blank=True)    
     timestamp = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

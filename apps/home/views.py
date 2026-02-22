@@ -199,19 +199,19 @@ def profile_view(request):
 @login_required
 def update_medical_record(request, citizen_id):
     """
-    Staff View: Allows Health Dept (Lvl 2+) to edit dental records.
+    Staff View: Allows Health Dept with DENTIST specialization to edit dental records.
     """
     # 1. Verify User is Staff
     if not (request.user.is_staff or request.user.groups.filter(name="GovernmentWorker").exists()):
         return render(request, 'home/noaccess.html', status=403)
 
-    # 2. Verify Department (HEALTH) and Clearance (Level >= 2)
+    # 2. Verify Department (HEALTH) and Specialization (DENTIST)
     try:
         staff_profile = StaffProfile.objects.get(user=request.user)
         
         # --- ABAC RULE IMPLEMENTATION ---
-        if staff_profile.department != 'HEALTH' or staff_profile.security_level < 2:
-            messages.error(request, "Access Denied: You need Health Dept Level 2 clearance.")
+        if staff_profile.department != 'HEALTH' or staff_profile.specialization != 'DENTIST':
+            messages.error(request, "Access Denied: Only certified Dentists can edit dental records.")
             return render(request, 'home/noaccess.html', status=403)
             
     except StaffProfile.DoesNotExist:
@@ -256,12 +256,13 @@ def update_medical_record(request, citizen_id):
 def dental_record_list(request):
     """
     Staff View: Lists all citizens with their dental record status.
-    Strictly for Health Dept (Level 2+).
+    Strictly for Health Dept (Dentists or Level 2+ admin).
     """
     # 1. Security Check (ABAC)
     try:
         staff_profile = StaffProfile.objects.get(user=request.user)
-        if staff_profile.department != 'HEALTH' or staff_profile.security_level < 2:
+        # Must be in HEALTH, and must either be a DENTIST or have Level 2+ clearance
+        if staff_profile.department != 'HEALTH' or (staff_profile.specialization != 'DENTIST' and staff_profile.security_level < 2):
             return render(request, 'home/noaccess.html', status=403)
     except StaffProfile.DoesNotExist:
         return render(request, 'home/noaccess.html', status=403)
@@ -618,9 +619,9 @@ def ticket_detail(request, ticket_uuid):
             try:
                 staff = StaffProfile.objects.get(user=user)
                 
-                # Dental Category Logic
+                # Dental Category Logic (ABAC IMPLEMENTED)
                 if ticket.category == 'DENTAL':
-                    if user.username == "EthanLim":
+                    if staff.department == 'HEALTH' and staff.specialization == 'DENTIST':
                         has_access = True
                         can_edit = True
                     elif staff.department == 'HEALTH' and staff.security_level >= 2:
@@ -692,13 +693,12 @@ def ticket_detail(request, ticket_uuid):
         return redirect("ticket_detail", ticket_uuid=ticket.id)
 
     # --- NEW: Fetch Attachments ---
-    # This pulls all files linked to this ticket via the related_name='attachments'
     attachments = ticket.attachments.all()
 
     # --- F. Prepare Data ---
     context = {
         "ticket": ticket,
-        "attachments": attachments, # <--- CRITICAL: Added this line
+        "attachments": attachments, 
         "is_gov": is_gov,
         "can_edit": can_edit,
         "sensitivity_levels": Ticket.TICKET_SENSITIVITY,
@@ -716,12 +716,14 @@ def ticket_detail(request, ticket_uuid):
             }
             # ABAC check for displaying sensitive profile details within the ticket
             staff = StaffProfile.objects.get(user=user)
-            if user.username == "EthanLim":
+            
+            if staff.department == 'HEALTH' and staff.specialization == 'DENTIST':
                 citizen_info["dental_stuff"] = profile.dental_stuff
             elif staff.department == 'HEALTH' and staff.security_level >= 2:
-                 citizen_info["dental_stuff"] = profile.dental_stuff
+                 citizen_info["dental_stuff"] = profile.dental_stuff # Read-only viewing
             else:
                 citizen_info["dental_stuff"] = "Restricted"
+                
             context["citizen_info"] = citizen_info
          except:
             context["citizen_info"] = None
