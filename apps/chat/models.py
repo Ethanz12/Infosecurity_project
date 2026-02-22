@@ -3,7 +3,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
-from security.crypto import encrypt, decrypt  # Use your existing encryption functions
+from security.crypto import encrypt, decrypt  # Your existing encryption functions
 import json
 
 
@@ -55,25 +55,28 @@ class Message(models.Model):
     def set_redacted_content(self, redacted_text: str):
         """Store redacted version for display in inbox/room."""
         self.redacted_content = redacted_text
+        # Cache it for quick access
+        self._redacted_cache = redacted_text
 
-    # def get_redacted_content(self) -> str:
-    #     """Return the redacted version (displayable)."""
-    #     return self.redacted_content or "[REDACTED]"
-
-    def get_redacted_content(self):
+    def get_redacted_content(self) -> str:
+        """
+        Return the redacted version for display.
+        Guarantees a string, never a list or None.
+        """
         if hasattr(self, '_redacted_cache'):
-            return self._redacted_cache  # already redacted string
-        # If stored as tuple, take only the string
+            return self._redacted_cache
         if isinstance(self.redacted_content, (list, tuple)):
-            return self.redacted_content[0]
-        return self.redacted_content
+            return str(self.redacted_content[0]) if self.redacted_content else "[REDACTED]"
+        if self.redacted_content:
+            return self.redacted_content
+        return "[REDACTED]"
 
     def __str__(self):
         return f"Message {self.id} in Conversation {self.conversation.id} by {self.sender.username}"
 
 
 # ----------------------------
-# Optional: Admin-configurable sensitive patterns
+# Admin-configurable sensitive patterns
 # ----------------------------
 class SensitivePattern(models.Model):
     """

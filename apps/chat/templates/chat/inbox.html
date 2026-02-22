@@ -46,8 +46,22 @@
     {% endif %}
 </div>
 
-<!-- 🔌 Live Search Script -->
 <script>
+// Helper: escape HTML
+function escapeHtml(str) {
+    if (!str) return "";
+    return str.replace(/[&<>"']/g, function(match) {
+        return {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }[match];
+    });
+}
+
+// 🔍 Live User Search
 const searchInput = document.getElementById("userSearch");
 const resultsBox = document.getElementById("searchResults");
 let controller = null;
@@ -78,7 +92,7 @@ searchInput.addEventListener("input", function () {
             const li = document.createElement("li");
             li.className = "list-group-item list-group-item-action d-flex justify-content-between align-items-center";
             li.innerHTML = `
-                <span>${user.username}</span>
+                <span>${escapeHtml(user.username)}</span>
                 <span class="text-primary">Start chat →</span>
             `;
 
@@ -92,10 +106,8 @@ searchInput.addEventListener("input", function () {
     })
     .catch(() => {});
 });
-</script>
 
-<!-- 🔁 Auto-refresh Inbox -->
-<script>
+// 🔁 Auto-refresh Inbox
 function fetchInbox() {
     fetch("{% url 'inbox_json' %}")
         .then(res => res.json())
@@ -104,15 +116,24 @@ function fetchInbox() {
             const ul = document.createElement("ul");
             ul.className = "list-group";
 
+            if (!data.inbox_data.length) {
+                inboxList.innerHTML = "<p>No conversations yet.</p>";
+                return;
+            }
+
             data.inbox_data.forEach(item => {
                 const li = document.createElement("li");
                 li.className = "list-group-item";
+
+                const participants = escapeHtml(item.participants.join(", "));
+                const lastMsg = escapeHtml(item.last_message);
+
                 li.innerHTML = `
                     <a href="/chat/room/${item.conversation_id}/">
-                        <strong>${item.participants.join(", ")}</strong>
+                        <strong>${participants}</strong>
                     </a>
                     <br>
-                    <small class="text-muted">${item.last_message}</small>
+                    <small class="text-muted">${lastMsg}</small>
                 `;
                 ul.appendChild(li);
             });

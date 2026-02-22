@@ -1,3 +1,4 @@
+# chat/urls.py
 from django.urls import path
 from . import views
 
@@ -9,3 +10,4 @@ urlpatterns = [
     path('room/json/<int:conversation_id>/', views.chat_room_json, name='chat_room_json'),  # <--- add this
     path('user_search/', views.user_search, name='user_search'),
 ]
+

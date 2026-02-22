@@ -8,8 +8,8 @@ from django.utils import timezone
 from django.http import JsonResponse
 from django.contrib.auth.models import User
 from .models import Conversation, Message, SensitivePattern
-from .redaction import redact_text  # ✅ new import
-from django.contrib.auth.decorators import login_required
+from .redaction import redact_text
+
 
 # ----------------------------
 # Inbox view: list all conversations + search for new chat
@@ -19,7 +19,7 @@ def chat_inbox(request):
     user = request.user
 
     # --- Search functionality ---
-    query = request.GET.get("q", "")
+    query = request.GET.get("q", "").strip()
     search_results = []
     if query:
         search_results = User.objects.filter(username__icontains=query).exclude(id=user.id)
@@ -47,19 +47,12 @@ def chat_inbox(request):
 # ----------------------------
 @login_required
 def chat_room(request, conversation_id=None, user_id=None):
-    """
-    Handles:
-    - Viewing a conversation
-    - Sending a message
-    - Starting a new conversation if user_id is provided
-    """
     user = request.user
     conversation = None
 
     # If conversation_id is provided, get it
     if conversation_id:
         conversation = get_object_or_404(Conversation, id=conversation_id)
-
         if not conversation.participants.filter(id=user.id).exists():
             messages.error(request, "You are not a participant of this conversation.")
             return redirect("chat_inbox")
@@ -93,7 +86,7 @@ def chat_room(request, conversation_id=None, user_id=None):
     messages_list = conversation.messages.order_by("created_at") if conversation else []
     # Ensure all messages are redacted (legacy messages)
     for msg in messages_list:
-        if not msg.get_redacted_content():
+        if not msg.get_redacted_content() or msg.get_redacted_content() == "[REDACTED]":
             redacted_text, _ = redact_text(msg.get_content())
             msg.set_redacted_content(redacted_text)
             msg.save()
@@ -116,10 +109,7 @@ def user_search(request):
     results = []
 
     if query:
-        users = User.objects.filter(
-            Q(username__icontains=query)
-        ).exclude(id=request.user.id)[:10]
-
+        users = User.objects.filter(username__icontains=query).exclude(id=request.user.id)[:10]
         results = [{"id": u.id, "username": u.username} for u in users]
 
     return JsonResponse({"results": results})
@@ -139,7 +129,7 @@ def chat_room_json(request, conversation_id):
     messages_list = []
     for msg in conversation.messages.order_by("created_at"):
         # Auto-redact if empty (legacy messages)
-        if not msg.get_redacted_content():
+        if not msg.get_redacted_content() or msg.get_redacted_content() == "[REDACTED]":
             redacted_text, _ = redact_text(msg.get_content())
             msg.set_redacted_content(redacted_text)
             msg.save()
@@ -154,11 +144,12 @@ def chat_room_json(request, conversation_id):
 
     return JsonResponse({"messages": messages_list})
 
+
+# ----------------------------
+# Inbox JSON endpoint for live updates
+# ----------------------------
 @login_required
 def inbox_json(request):
-    """
-    Returns JSON of user's inbox for live updates, with automatic redaction applied.
-    """
     user = request.user
     conversations = user.conversations.all().order_by('-updated_at')
 
@@ -166,9 +157,8 @@ def inbox_json(request):
     for convo in conversations:
         last_msg = convo.messages.order_by('-created_at').first()
 
-        # Redact the last message
         if last_msg:
-            redacted_text = redact_text(last_msg.get_content())
+            redacted_text, _ = redact_text(last_msg.get_content())
         else:
             redacted_text = "[No messages yet]"
 
