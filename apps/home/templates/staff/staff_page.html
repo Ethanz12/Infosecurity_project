@@ -44,6 +44,18 @@
                                 {% endif %}
                             </span>
                         </div>
+                        
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="small text-muted fw-bold">SPECIALTY</span>
+                            <span class="small fw-bold text-dark">
+                                {% if user.staffprofile %}
+                                    {{ user.staffprofile.get_specialization_display }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </span>
+                        </div>
+
                         <div class="d-flex justify-content-between mb-2">
                             <span class="small text-muted fw-bold">CLEARANCE</span>
                             <span>
@@ -51,16 +63,6 @@
                                     <span class="badge bg-danger">Level 2 (Senior)</span>
                                 {% else %}
                                     <span class="badge bg-info text-dark">Level 1 (Junior)</span>
-                                {% endif %}
-                            </span>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <span class="small text-muted fw-bold">LOCATION</span>
-                            <span>
-                                {% if user.staffprofile.can_access_location %}
-                                    <span class="badge bg-success">Granted</span>
-                                {% else %}
-                                    <span class="badge bg-secondary">Restricted</span>
                                 {% endif %}
                             </span>
                         </div>
@@ -103,21 +105,10 @@
                             <h6 class="fw-bold">Medical Registry</h6>
                             <p class="small text-muted mb-3">Access sensitive patient data</p>
                             
-                            {% if user.staffprofile.department == 'HEALTH' and user.staffprofile.security_level >= 2 %}
+                            {% if user.staffprofile.department == 'HEALTH' and user.staffprofile.security_level >= 2 or user.staffprofile.department == 'HEALTH' and user.staffprofile.specialization == 'DENTIST' %}
                                 <a href="{% url 'dental_record_list' %}" class="btn btn-outline-danger btn-sm w-100 mb-2">
                                     <i class="fas fa-list me-1"></i> View All Records
                                 </a>
-                                
-                                <form action="" method="get" class="d-flex gap-1" onsubmit="event.preventDefault(); goToMedicalUpdate(this);">
-                                    <input type="number" class="form-control form-control-sm" placeholder="ID #" id="citizenIdInput" required>
-                                    <button class="btn btn-danger btn-sm" type="submit">Go</button>
-                                </form>
-                                <script>
-                                    function goToMedicalUpdate(form) {
-                                        var id = form.querySelector('#citizenIdInput').value;
-                                        if(id) window.location.href = "/staff/medical/update/" + id + "/";
-                                    }
-                                </script>
                             {% else %}
                                 <button class="btn btn-light btn-sm w-100 text-muted" disabled>
                                     <i class="fas fa-lock me-1"></i> Restricted
