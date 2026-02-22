@@ -605,6 +605,7 @@ def ticket_detail(request, ticket_uuid):
     
     has_access = False
     can_edit = False 
+    is_restricted_view = False # NEW ABAC FLAG
 
     # --- B. Check Access Rights ---
     if is_owner:
@@ -626,7 +627,8 @@ def ticket_detail(request, ticket_uuid):
                         can_edit = True
                     elif staff.department == 'HEALTH' and staff.security_level >= 2:
                         has_access = True
-                        can_edit = False 
+                        can_edit = True # Give them edit access to refer the ticket
+                        is_restricted_view = True # But trigger the restricted view flag!
                     else:
                         has_access = False
                 
@@ -692,8 +694,13 @@ def ticket_detail(request, ticket_uuid):
         messages.success(request, "Ticket updated.")
         return redirect("ticket_detail", ticket_uuid=ticket.id)
 
-    # --- NEW: Fetch Attachments ---
-    attachments = ticket.attachments.all()
+    # --- NEW: Restrict Data for Mismatched Specialties ---
+    if is_restricted_view:
+        # Override the description dynamically (doesn't save to DB)
+        ticket.description = "[CONTENT RESTRICTED] This ticket contains information outside your specialization. You may reply to refer this ticket or transfer the ticket, but patient details have been hidden."
+        attachments = [] # Clear attachments out of the context
+    else:
+        attachments = ticket.attachments.all()
 
     # --- F. Prepare Data ---
     context = {
@@ -717,10 +724,8 @@ def ticket_detail(request, ticket_uuid):
             # ABAC check for displaying sensitive profile details within the ticket
             staff = StaffProfile.objects.get(user=user)
             
-            if staff.department == 'HEALTH' and staff.specialization == 'DENTIST':
+            if not is_restricted_view and staff.department == 'HEALTH' and staff.specialization == 'DENTIST':
                 citizen_info["dental_stuff"] = profile.dental_stuff
-            elif staff.department == 'HEALTH' and staff.security_level >= 2:
-                 citizen_info["dental_stuff"] = profile.dental_stuff # Read-only viewing
             else:
                 citizen_info["dental_stuff"] = "Restricted"
                 

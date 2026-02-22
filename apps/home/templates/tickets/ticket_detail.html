@@ -43,7 +43,17 @@
                     <h5 class="mb-0 fw-bold text-primary"><i class="fas fa-align-left me-2"></i> Description</h5>
                 </div>
                 <div class="card-body">
-                    <p class="card-text" style="white-space: pre-wrap;">{{ ticket.description }}</p>
+                    {% if 'CONTENT RESTRICTED' in ticket.description %}
+                        <div class="alert alert-danger d-flex align-items-center mb-0 border-start border-danger border-4">
+                            <i class="fas fa-shield-alt fa-2x me-3"></i>
+                            <div>
+                                <h6 class="fw-bold mb-1">Privacy Lock Active</h6>
+                                <p class="mb-0 small">{{ ticket.description }}</p>
+                            </div>
+                        </div>
+                    {% else %}
+                        <p class="card-text" style="white-space: pre-wrap;">{{ ticket.description }}</p>
+                    {% endif %}
                 </div>
             </div>
 
@@ -218,11 +228,18 @@
             {% endif %}
 
             {% if is_gov and can_edit %}
-            <div class="card shadow-sm border-0 bg-primary bg-opacity-10">
-                <div class="card-header bg-primary text-white fw-bold">
-                    <i class="fas fa-tools me-2"></i> Staff Actions
+            <div class="card shadow-sm border-0 {% if 'CONTENT RESTRICTED' in ticket.description %}bg-warning bg-opacity-10{% else %}bg-primary bg-opacity-10{% endif %}">
+                <div class="card-header {% if 'CONTENT RESTRICTED' in ticket.description %}bg-warning text-dark{% else %}bg-primary text-white{% endif %} fw-bold">
+                    {% if 'CONTENT RESTRICTED' in ticket.description %}
+                        <i class="fas fa-share-square me-2"></i> Refer / Transfer Ticket
+                    {% else %}
+                        <i class="fas fa-tools me-2"></i> Staff Actions
+                    {% endif %}
                 </div>
                 <div class="card-body">
+                    {% if 'CONTENT RESTRICTED' in ticket.description %}
+                        <p class="small text-muted mb-3"><i class="fas fa-info-circle me-1"></i> You cannot view the details, but you can leave an internal note below to refer this to the correct specialist.</p>
+                    {% endif %}
                     <form method="post">
                         {% csrf_token %}
                         
@@ -237,12 +254,24 @@
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label small fw-bold">Update Response</label>
+                            <label class="form-label small fw-bold">
+                                {% if 'CONTENT RESTRICTED' in ticket.description %}
+                                    Referral Note / Response
+                                {% else %}
+                                    Update Response
+                                {% endif %}
+                            </label>
                             <textarea name="gov_response" class="form-control form-control-sm" rows="3">{{ ticket.gov_response }}</textarea>
                         </div>
 
                         <div class="d-grid">
-                            <button type="submit" class="btn btn-primary btn-sm shadow-sm">Save Changes</button>
+                            <button type="submit" class="btn {% if 'CONTENT RESTRICTED' in ticket.description %}btn-warning{% else %}btn-primary{% endif %} btn-sm shadow-sm">
+                                {% if 'CONTENT RESTRICTED' in ticket.description %}
+                                    Submit Referral
+                                {% else %}
+                                    Save Changes
+                                {% endif %}
+                            </button>
                         </div>
                     </form>
                 </div>
